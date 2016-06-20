@@ -1,8 +1,9 @@
 package org.broadinstitute.hail.driver
 
 import org.apache.solr.client.solrj.impl.HttpSolrClient
+import org.apache.solr.client.solrj.request.schema.SchemaRequest
 import org.apache.solr.common.SolrInputDocument
-import org.broadinstitute.hail.expr.{EvalContext, Parser, TArray, TVariant}
+import org.broadinstitute.hail.expr._
 
 import scala.collection.JavaConverters._
 import org.broadinstitute.hail.Utils._
@@ -33,6 +34,57 @@ object ExportVariantsSolr extends Command {
 
   def requiresVDS = true
 
+  def toSolrType(t: Type): String = t match {
+    case TInt => "tint"
+    case TLong => "tlong"
+    case TFloat => "tfloat"
+    case TDouble => "tdouble"
+    case TBoolean => "boolean"
+    case TString => "string"
+    // FIXME only 1 deep
+    case i: TIterable => toSolrType(i.elementType)
+    case _ => fatal("")
+  }
+
+  def escapeSolrFieldName(name: String): String = {
+    val sb = new StringBuilder
+
+    if (name.head.isDigit)
+      sb += '_'
+
+    name.foreach { c =>
+      if (c.isLetterOrDigit)
+        sb += c
+      else
+        sb += '_'
+    }
+
+    sb.result()
+  }
+
+  def solrAddField(solr: HttpSolrClient, name: String, t: Type) {
+    val m = mutable.Map.empty[String, AnyRef]
+
+    m += "name" -> escapeSolrFieldName(name)
+    m += "type" -> toSolrType(t)
+    m += "stored" -> true.asInstanceOf[AnyRef]
+    if (t.isInstanceOf[TIterable])
+      m += "multiValued" -> true.asInstanceOf[AnyRef]
+
+    val req = new SchemaRequest.AddField(m.asJava)
+    req.process(solr)
+  }
+
+  def documentAddField(document: SolrInputDocument, name: String, t: Type, value: Any) {
+    if (t.isInstanceOf[TIterable]) {
+      value.asInstanceOf[Seq[_]].foreach { xi =>
+        document.addField(escapeSolrFieldName(name), xi)
+      }
+
+    } else
+      document.addField(escapeSolrFieldName(name), value)
+  }
+
   def run(state: State, options: Options): State = {
     val sc = state.vds.sparkContext
     val vds = state.vds
@@ -45,12 +97,25 @@ object ExportVariantsSolr extends Command {
     val ec = EvalContext(symTab)
     val a = ec.a
 
-    val (header, fs) = Parser.parseExportArgs(cond, ec)
-    if (header.isEmpty)
-      fatal("column names required in condition")
+    // FIXME use custom parser with constraint on Solr field name
+    val parsed = Parser.parseAnnotationArgs(cond, ec)
+      .map { case (name, t, f) =>
+        assert(name.tail == Nil)
+        (name.head, t, f)
+      }
 
-    val columns = header.get.split("\t")
     val url = options.url
+
+    val solr = new HttpSolrClient(url)
+    parsed.foreach { case (name, t, f) =>
+      solrAddField(solr, name, t)
+    }
+
+    vds.sampleIds.foreach { id =>
+      solrAddField(solr, id + "_num_alt", TInt)
+      solrAddField(solr, id + "_ab", TFloat)
+      solrAddField(solr, id + "_gq", TInt)
+    }
 
     val sampleIdsBc = sc.broadcast(vds.sampleIds)
     vds.rdd.foreachPartition { it =>
@@ -59,29 +124,25 @@ object ExportVariantsSolr extends Command {
 
         val document = new SolrInputDocument()
 
-        /*
-        document.addField("chr", v.contig)
-        document.addField("pos", v.start)
-        document.addField("ref", v.ref)
-        document.addField("pos", v.alt) */
-
-        fs.zip(columns).foreach { case (f, col) =>
+        parsed.foreach { case (name, t, f) =>
           a(0) = v
           a(1) = va
-          document.addField(col, f().asInstanceOf[AnyRef])
+
+          // FIXME export types
+          f().foreach(x => documentAddField(document, name, t, x.asInstanceOf[AnyRef]))
         }
 
         gs.iterator.zip(sampleIdsBc.value.iterator).foreach { case (g, id) =>
           g.nNonRefAlleles
             .filter(_ > 0)
             .foreach { n =>
-              document.addField(id + "_num_alt", n.toString)
+              documentAddField(document, id + "_num_alt", TInt, n)
               g.ad.foreach { ada =>
                 val ab = ada(0).toDouble / (ada(0) + ada(1))
-                document.addField(id + "_ab", ab.toString)
+                documentAddField(document, id + "_ab", TFloat, ab.toFloat)
               }
               g.gq.foreach { gqx =>
-                document.addField(id + "_gq", gqx.toString)
+                documentAddField(document, id + "_gq", TInt, gqx)
               }
             }
         }
