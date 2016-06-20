@@ -1,6 +1,7 @@
 package org.broadinstitute.hail.driver
 
-import org.apache.solr.client.solrj.impl.HttpSolrClient
+import org.apache.solr.client.solrj.SolrClient
+import org.apache.solr.client.solrj.impl.{CloudSolrClient, HttpSolrClient}
 import org.apache.solr.client.solrj.request.schema.SchemaRequest
 import org.apache.solr.common.SolrInputDocument
 import org.broadinstitute.hail.expr._
@@ -11,16 +12,20 @@ import org.kohsuke.args4j.{Option => Args4jOption}
 
 import scala.collection.mutable
 
-object ExportVariantsSolr extends Command {
+object ExportVariantsSolr extends Command with Serializable {
 
   class Options extends BaseOptions {
     @Args4jOption(required = true, name = "-c", aliases = Array("--condition"),
       usage = "comma-separated list of fields/computations to be exported")
     var condition: String = _
 
-    @Args4jOption(required = true, name = "-u", aliases = Array("--url"),
+    @Args4jOption(name = "-u", aliases = Array("--url"),
       usage = "Solr instance (URL) to connect to")
     var url: String = _
+
+    @Args4jOption(name = "-z", aliases = Array("--zk-host"),
+      usage = "Zookeeper host string to connect to")
+    var zkHost: String = _
 
   }
 
@@ -62,7 +67,7 @@ object ExportVariantsSolr extends Command {
     sb.result()
   }
 
-  def solrAddField(solr: HttpSolrClient, name: String, t: Type) {
+  def solrAddField(solr: SolrClient, name: String, t: Type) {
     val m = mutable.Map.empty[String, AnyRef]
 
     m += "name" -> escapeSolrFieldName(name)
@@ -80,7 +85,6 @@ object ExportVariantsSolr extends Command {
       value.asInstanceOf[Seq[_]].foreach { xi =>
         document.addField(escapeSolrFieldName(name), xi)
       }
-
     } else
       document.addField(escapeSolrFieldName(name), value)
   }
@@ -105,8 +109,20 @@ object ExportVariantsSolr extends Command {
       }
 
     val url = options.url
+    val zkHost = options.zkHost
 
-    val solr = new HttpSolrClient(url)
+    if (url == null && zkHost == null)
+      fatal("one of -u or -z required")
+
+    if (url != null && zkHost != null)
+      fatal("both -u and -z given")
+
+    val solr =
+      if (url != null)
+        new HttpSolrClient(url)
+      else
+        new CloudSolrClient(zkHost)
+
     parsed.foreach { case (name, t, f) =>
       solrAddField(solr, name, t)
     }
@@ -116,7 +132,7 @@ object ExportVariantsSolr extends Command {
       solrAddField(solr, id + "_ab", TFloat)
       solrAddField(solr, id + "_gq", TInt)
     }
-
+    
     val sampleIdsBc = sc.broadcast(vds.sampleIds)
     vds.rdd.foreachPartition { it =>
       val ab = mutable.ArrayBuilder.make[AnyRef]
@@ -129,7 +145,7 @@ object ExportVariantsSolr extends Command {
           a(1) = va
 
           // FIXME export types
-          f().foreach(x => documentAddField(document, name, t, x.asInstanceOf[AnyRef]))
+          f().foreach(x => documentAddField(document, name, t, x))
         }
 
         gs.iterator.zip(sampleIdsBc.value.iterator).foreach { case (g, id) =>
@@ -150,7 +166,12 @@ object ExportVariantsSolr extends Command {
         document
       }
 
-      val solr = new HttpSolrClient(url)
+      val solr =
+        if (url != null)
+          new HttpSolrClient(url)
+        else
+          new CloudSolrClient(zkHost)
+
       solr.add(documents.asJava)
 
       // FIXME back off it commit fails
