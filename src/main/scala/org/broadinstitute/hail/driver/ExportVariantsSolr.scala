@@ -1,8 +1,10 @@
 package org.broadinstitute.hail.driver
 
+import java.util.concurrent.TimeoutException
+
 import org.apache.solr.client.solrj.impl.{CloudSolrClient, HttpSolrClient}
 import org.apache.solr.client.solrj.request.schema.SchemaRequest
-import org.apache.solr.common.SolrInputDocument
+import org.apache.solr.common.{SolrException, SolrInputDocument}
 import org.broadinstitute.hail.expr._
 
 import scala.collection.JavaConverters._
@@ -10,6 +12,7 @@ import org.broadinstitute.hail.Utils._
 import org.kohsuke.args4j.{Option => Args4jOption}
 
 import scala.collection.mutable
+import scala.util.Random
 
 object ExportVariantsSolr extends Command with Serializable {
 
@@ -197,11 +200,13 @@ object ExportVariantsSolr extends Command with Serializable {
         }
 
         gs.iterator.zipWithIndex.foreach { case (g, i) =>
-          val s = sampleIdsBc.value(i)
-          val sa = sampleAnnotationsBc.value(i)
-          gparsed.foreach { case (name, t, f) =>
-            gEC.setAll(v, va, s, sa, g)
-            f().foreach(x => documentAddField(document, s + "_" + name, t, x))
+          if (g.isCalled && !g.isHomRef) {
+            val s = sampleIdsBc.value(i)
+            val sa = sampleAnnotationsBc.value(i)
+            gparsed.foreach { case (name, t, f) =>
+              gEC.setAll(v, va, s, sa, g)
+              f().foreach(x => documentAddField(document, s + "_" + name, t, x))
+            }
           }
         }
 
@@ -217,10 +222,23 @@ object ExportVariantsSolr extends Command with Serializable {
           cc
         }
 
-      solr.add(documents.asJava)
+      var retry = true
+      var retryInterval = 3 * 1000 // 3s
+      val maxRetryInterval = 3 * 60 * 1000 // 3m
 
-      // FIXME back off it commit fails
-      solr.commit()
+      while (retry) {
+        try {
+          solr.add(documents.asJava)
+          solr.commit()
+          retry = false
+        } catch {
+          case e: SolrException if e.getCause.isInstanceOf[TimeoutException] =>
+            warn("add documents timeout, retrying")
+
+            Thread.sleep(Random.nextInt(retryInterval))
+            retryInterval = (retryInterval * 2).max(maxRetryInterval)
+        }
+      }
     }
 
     state
