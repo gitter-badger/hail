@@ -232,7 +232,7 @@ object ExportVariantsSolr extends Command with Serializable {
           solr.commit()
           retry = false
         } catch {
-          case e: SolrException if e.getCause.isInstanceOf[TimeoutException] =>
+          case e: SolrException =>
             warn("add documents timeout, retrying")
 
             Thread.sleep(Random.nextInt(retryInterval))
