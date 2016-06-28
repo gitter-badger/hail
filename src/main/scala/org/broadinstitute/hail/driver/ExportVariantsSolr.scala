@@ -1,7 +1,5 @@
 package org.broadinstitute.hail.driver
 
-import java.util.concurrent.TimeoutException
-
 import org.apache.solr.client.solrj.impl.{CloudSolrClient, HttpSolrClient}
 import org.apache.solr.client.solrj.request.schema.SchemaRequest
 import org.apache.solr.common.{SolrException, SolrInputDocument}
@@ -58,6 +56,7 @@ object ExportVariantsSolr extends Command with Serializable {
     case TString => "string"
     // FIXME only 1 deep
     case i: TIterable => toSolrType(i.elementType)
+      // FIXME
     case _ => fatal("")
   }
 
