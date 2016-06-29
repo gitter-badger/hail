@@ -1,6 +1,7 @@
 package org.broadinstitute.hail.driver
 
 import com.datastax.driver.core._
+import com.datastax.driver.core.querybuilder.QueryBuilder
 import org.broadinstitute.hail.expr._
 import org.broadinstitute.hail.Utils._
 import org.kohsuke.args4j.{Option => Args4jOption}
@@ -96,16 +97,16 @@ object ExportVariantsCass extends Command {
       fatal("")
   }
 
-  def toCassValue(a: Any, t: Type): Any = t match {
+  def toCassValue(a: Any, t: Type): AnyRef = t match {
     case TArray(elementType) => a.asInstanceOf[Seq[_]].asJava
-    case _ => a
+    case _ => a.asInstanceOf[AnyRef]
   }
 
   def escapeCassColumnName(name: String): String = {
     val sb = new StringBuilder
 
     if (name.head.isDigit)
-      sb += '_'
+      sb += 'x'
 
     name.foreach { c =>
       if (c.isLetterOrDigit)
@@ -170,6 +171,7 @@ object ExportVariantsCass extends Command {
 
     val session = CassandraStuff.getSession(address)
 
+    // FIXME check keyspace, table exsit (null)
     val tableMetadata = session.getCluster.getMetadata.getKeyspace(keyspace).getTable(table)
     val preexistingFields = tableMetadata.getColumns.asScala.map(_.getName).toSet
     val toAdd = fields
@@ -183,63 +185,52 @@ object ExportVariantsCass extends Command {
 
     CassandraStuff.disconnect()
 
-    val query =
-      s"""
-         |INSERT INTO $qualifiedTable
-         |(${fields.map(_._1).mkString(",")})
-         |VALUES (${fields.map(_ => "?").mkString(",")});
-      """.stripMargin
-
     val sampleIdsBc = sc.broadcast(vds.sampleIds)
     val sampleAnnotationsBc = sc.broadcast(vds.sampleAnnotations)
 
-    vds.rdd
+    val futures = vds.rdd
       .foreachPartition { it =>
         val session = CassandraStuff.getSession(address)
 
-        val preparedStmt = session.prepare(query)
-        val ab = mutable.ArrayBuilder.make[AnyRef]
+        val nb = mutable.ArrayBuilder.make[String]
+        val vb = mutable.ArrayBuilder.make[AnyRef]
 
         val futures = it
-          .grouped(1000)
-          .map { jt =>
-            val batchStmt = new BatchStatement()
+          .map { case (v, va, gs) =>
+            nb.clear()
+            vb.clear()
 
-            jt.map { case (v, va, gs) =>
-              ab.clear()
-
-              vparsed.foreach { case (name, t, f) =>
-                vEC.setAll(v, va)
-                ab += f().map(a => toCassValue(a, t)).orNull.asInstanceOf[AnyRef]
+            vparsed.foreach { case (name, t, f) =>
+              vEC.setAll(v, va)
+              f().foreach { a =>
+                nb += escapeCassColumnName(name)
+                vb += toCassValue(a, t)
               }
-
-              gs.iterator.zipWithIndex.foreach { case (g, i) =>
-                val s = sampleIdsBc.value(i)
-                val sa = sampleAnnotationsBc.value(i)
-                gparsed.foreach { case (name, t, f) =>
-                  if (g.isCalled && !g.isHomRef) {
-                    gEC.setAll(v, va, s, sa, g)
-                    ab += f().map(a => toCassValue(a, t)).orNull.asInstanceOf[AnyRef]
-                  } else
-                    ab += null
-                }
-              }
-
-              val r = ab.result()
-              println(r.length)
-              println(fields.length)
-              assert(r.length == fields.length)
-
-              val boundStmt = new BoundStatement(preparedStmt)
-              batchStmt.add(boundStmt.bind(r: _*))
             }
 
-            println(batchStmt.getStatements.size)
-            session.execute(batchStmt)
+            gs.iterator.zipWithIndex.foreach { case (g, i) =>
+              val s = sampleIdsBc.value(i)
+              val sa = sampleAnnotationsBc.value(i)
+              gparsed.foreach { case (name, t, f) =>
+                if (g.isCalled && !g.isHomRef) {
+                  gEC.setAll(v, va, s, sa, g)
+                  f().foreach { a =>
+                    nb += escapeCassColumnName(s + "_" + name)
+                    vb += toCassValue(a, t)
+                  }
+                }
+              }
+            }
+
+            val names = nb.result()
+            val values = vb.result()
+
+            session.executeAsync(QueryBuilder
+              .insertInto(keyspace, table)
+              .values(names, values))
           }
 
-        futures.foreach { _ => }
-        // futures.foreach(_.getUninterruptibly())
+        futures.foreach(_.getUninterruptibly())
 
         CassandraStuff.disconnect()
       }
