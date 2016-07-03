@@ -101,9 +101,7 @@ object GenomicIntervalSet {
               assert(direction == "+" || direction == "-")
               (GenomicInterval(contig, start.toInt, end.toInt), target)
             case _ => fatal(
-              """invalid interval format.  Acceptable formats:
-                |  `chr:start-end'
-                |  `chr  start  end' (tab-separated)
+              """invalid interval format.  Acceptable format:
                 |  `chr  start  end  strand  target' (tab-separated, strand is `+' or `-')
               """.stripMargin)
           }
