@@ -4,6 +4,7 @@ import org.broadinstitute.hail.Utils._
 import org.broadinstitute.hail.annotations.Annotation
 import org.broadinstitute.hail.expr._
 import org.broadinstitute.hail.io.annotators._
+import org.broadinstitute.hail.utils.{ParseContext, ParseSettings}
 import org.broadinstitute.hail.variant._
 import org.json4s.jackson.JsonMethods._
 import org.kohsuke.args4j.{Argument, Option => Args4jOption}
@@ -22,24 +23,37 @@ object ImportAnnotations extends SuperCommand {
 object ImportAnnotationsTable extends Command {
 
   class Options extends BaseOptions {
-    @Argument(usage = "<files...>")
-    var arguments: java.util.ArrayList[String] = new java.util.ArrayList[String]()
-
     @Args4jOption(required = false, name = "-t", aliases = Array("--types"),
       usage = "Define types of fields in annotations files")
     var types: String = ""
 
     @Args4jOption(required = false, name = "-m", aliases = Array("--missing"),
-      usage = "Specify additional identifiers to be treated as missing")
+      usage = "Specify identifier to be treated as missing")
     var missingIdentifier: String = "NA"
 
-    @Args4jOption(required = false, name = "--vcolumns",
+    @Args4jOption(required = false, name = "-v", aliases = Array("--vcolumns"),
       usage = "Specify the column identifiers for chromosome, position, ref, and alt (in that order)")
-    var vCols: String = "Chromosome, Position, Ref, Alt"
+    var vCols: String = "Chromosome,Position,Ref,Alt"
+
+    @Args4jOption(required = false, name = "-s", aliases = Array("--select"),
+      usage = "Select only certain columns.  Enter columns to keep as a comma-separated list")
+    var select: String = _
+
+    @Args4jOption(required = false, name = "--noheader", usage =
+      "indicate that the file has no header and columns should be indicated by number (0-indexed)")
+    var noheader: Boolean = _
 
     @Args4jOption(required = false, name = "-d", aliases = Array("--delimiter"),
       usage = "Field delimiter regex")
-    var delimiter: String = "\\t"
+    var separator: String = "\\t"
+
+    @Args4jOption(required = false, name = "-c", aliases = Array("--comment"),
+      usage = "Skip lines beginning with the given pattern")
+    var commentChar: String = _
+
+    @Argument(usage = "<files...>")
+    var arguments: java.util.ArrayList[String] = new java.util.ArrayList[String]()
+
   }
 
   def newOptions = new Options
@@ -58,15 +72,42 @@ object ImportAnnotationsTable extends Command {
     if (files.isEmpty)
       fatal("Arguments referred to no files")
 
-    val (rdd, signature) = VariantTableAnnotator(state.sc,
-      files,
-      AnnotateVariantsTable.parseColumns(options.vCols),
-      Parser.parseAnnotationTypes(options.types),
-      options.missingIdentifier, options.delimiter)
+    val vCols = AnnotateVariantsTable.parseColumns(options.vCols)
+    val keySig =
+      if (vCols.length == 1)
+        vCols.head -> TVariant
+      else
+        vCols(1) -> TInt
+
+    val settings = ParseSettings(
+      types = Parser.parseAnnotationTypes(options.types) + keySig,
+      keyCols = vCols,
+      useCols = Option(options.select).map(o => Parser.parseIdentifierList(o)),
+      hasHeader = !options.noheader,
+      separator = options.separator,
+      missing = options.missingIdentifier,
+      commentChar = Option(options.commentChar))
+
+    val pc = ParseContext.read(files.head, state.hadoopConf, settings)
+
+    val filter = pc.filter
+    val parser = pc.parser
+
+    val rdd = state.sc.textFilesLines(files)
+      .filter(l => filter(l.value))
+      .map(l => l.transform { line =>
+        val pl = parser(line.value)
+        val v = pl.key match {
+          case Array(variant) => variant.asInstanceOf[Variant]
+          case Array(chr, pos, ref, alt) => Variant(chr.asInstanceOf[String], pos.asInstanceOf[Int], ref.asInstanceOf[String], alt.asInstanceOf[String])
+        }
+
+        (v, pl.value): (Variant, Annotation)
+      })
 
     val vds = new VariantDataset(
       VariantMetadata(IndexedSeq.empty, Annotation.emptyIndexedSeq(0), Annotation.empty,
-        TStruct.empty, signature, TStruct.empty, wasSplit = true),
+        TStruct.empty, pc.schema, TStruct.empty, wasSplit = true),
       rdd.map { case (v, va) => (v, va, Iterable.empty) })
 
     state.copy(vds = vds)

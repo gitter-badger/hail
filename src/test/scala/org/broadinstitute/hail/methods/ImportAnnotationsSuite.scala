@@ -36,7 +36,7 @@ class ImportAnnotationsSuite extends SparkSuite {
     }
 
     val anno1 = AnnotateSamples.run(state,
-      Array("table", "-i", "src/test/resources/sampleAnnotations.tsv", "-s", "Sample", "-r", "sa.`my phenotype`", "-t", "qPhen:Int"))
+      Array("table", "-i", "src/test/resources/sampleAnnotations.tsv", "-k", "Sample", "-r", "sa.`my phenotype`", "-t", "qPhen:Int"))
 
     val q1 = anno1.vds.querySA("sa.`my phenotype`.Status")._2
     val q2 = anno1.vds.querySA("sa.`my phenotype`.qPhen")._2
@@ -166,7 +166,7 @@ class ImportAnnotationsSuite extends SparkSuite {
 
     val anno1alternate = AnnotateVariants.run(state,
       Array("table", "src/test/resources/variantAnnotations.alternateformat.tsv", "--vcolumns",
-        "Chromosome:Position:Ref:Alt", "-t", "Rand1:Double,Rand2:Double", "-r", "va.stuff"))
+        "`Chromosome:Position:Ref:Alt`", "-t", "Rand1:Double,Rand2:Double", "-r", "va.stuff"))
 
     val anno1glob = AnnotateVariants.run(state, Array("table", "src/test/resources/variantAnnotations.split.*.tsv",
       "-t", "Rand1:Double,Rand2:Double", "-r", "va.stuff"))

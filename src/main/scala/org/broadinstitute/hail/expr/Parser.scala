@@ -59,6 +59,16 @@ object Parser extends JavaTokenParsers {
       }
   }
 
+  def parseIdentifierList(code: String): Array[String] = {
+    if (code.matches("""\s*"""))
+      Array.empty[String]
+    else
+      parseAll(identifierList, code) match {
+        case Success(result, _) => result
+        case NoSuccess(msg, next) => ParserUtils.error(next.pos, msg)
+      }
+  }
+
   def withPos[T](p: => Parser[T]): Parser[Positioned[T]] =
     positioned[Positioned[T]](p ^^ { x => Positioned(x) })
 
@@ -238,6 +248,10 @@ object Parser extends JavaTokenParsers {
   def tickIdentifier: Parser[String] = """`[^`]+`""".r ^^ { i => i.substring(1, i.length - 1) }
 
   def identifier = tickIdentifier | ident
+
+  def identifierList: Parser[Array[String]] = rep1sep(identifier, ",") ^^ {
+    _.toArray
+  }
 
   def args: Parser[Array[AST]] =
     repsep(expr, ",") ^^ {

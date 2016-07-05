@@ -553,8 +553,13 @@ case object TAltAllele extends Type {
   override def genValue: Gen[Annotation] = AltAllele.gen
 }
 
-case object TVariant extends Type {
+case object TVariant extends Type with Parsable {
   override def toString = "Variant"
+
+  def parse(s: String) = s.split(":") match {
+    case Array(chr, pos, ref, alt) => Variant(chr, pos.toInt, ref, alt.split(","))
+    case _ => fatal(s"invalid variant identifier: `$s'")
+  }
 
   def typeCheck(a: Any): Boolean = a == null || a.isInstanceOf[Variant]
 
