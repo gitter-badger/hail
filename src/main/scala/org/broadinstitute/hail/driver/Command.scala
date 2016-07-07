@@ -70,6 +70,7 @@ object ToplevelCommands {
   register(GQByDP)
   register(GQHist)
   register(ImportVCF)
+  register(ImputeSex)
   register(LinearRegressionCommand)
   register(MendelErrorsCommand)
   register(SplitMulti)
