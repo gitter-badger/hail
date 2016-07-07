@@ -40,12 +40,18 @@ This module expects a text file with multiple delimited columns (default: tab-de
 
 **Command line arguments:**
 
-- `table` Invoke this functionality (`annotatesamples table <args>`)
-- `-i | --input <path-to-file>` specify the file path **(Required)**
-- `-r | --root <root>` specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `sa` **(Required)**
-- `-s | --sampleheader <id>` specify the name of the column containing sample IDs **(Optional with default "Sample")**
-- `-t | --types <typestring>` specify data types of fields, in a comma-delimited string of `name: Type` elements.  **If a field is not found in this type map, it will be read and stored as a string** **(Optional)**
-- `-m | --missing <missing-value>` specify identifiers to be treated as missing, in a comma-separated list **(Optional with default "NA")**
+Argument | Shortcut | Description
+:-: | :-: | ---
+`table`                     | `---` | Invoke this functionality (`annotatesamples table <args>`)
+`--input <file>`            | `-i`  | specify the file path **(Required)**
+`--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `sa`, e.g. `sa.phenotype` **(Required)**
+`--key <column-id>`         | `-k`  | specify the name of the column containing sample IDs **(Optional with default "Sample")**
+`--types <type-mapping>`    | `-t`  | specify data types of fields, in a comma-delimited string of `name: Type` elements.  **If a field is not found in this type map, it will be read and stored as a string** **(Optional)**
+`--delimiter <regex>` | `-d`  | specify file delimiter **(Optional with default "\\t")**
+`--missing <missing-value>` | `-m`  | specify identifiers to be treated as missing, in a comma-separated list **(Optional with default "NA")**
+`--select <cols-to-use>`     | `-s`  | Only load specific columns, delimited by commas **(Optional, all columns used by default)**
+`--comment <comment-char>`  | `-c`  | Skip lines following in the given string **(Optional)**
+`--no-header`               | `---` | Indicate that the file has no header.  Columns will instead be read as numbered, from `_0, _1, _2, ... _N`
 
 ____
 
@@ -133,13 +139,15 @@ ____
 ### Plink .fam files
 
 For convenience, Hail provides a simple command to import sample annotations from [Plink .fam files](https://www.cog-genomics.org/plink2/formats#fam). For case-control phenotypes, Hail assumes `1` means control and `2` means case.
-
- - `fam` Invoke this functionality (`annotatesamples fam <args>`)
- - `-i | --input <filename>` path of .fam file
- - `-q | --quantitative` flag to indicate quantitative phenotype (optional, default is case-control)
- - `-r | --root <root>` a period-delimited annotation path starting with `sa` (optional, default is `sa.fam`)
- - `-d | --delimiter <delimiter>` field delimiter in .fam file (optional, default is `\t`)
- - `-m | --missing <filename>` identifier to be treated as missing (optional, default is `NA`)
+ 
+ Argument | Shortcut | Description
+ :-: | :-: | ---
+ `fam`                     | `---` | Invoke this functionality (`annotatesamples fam <args>`)
+ `--input <file>`            | `-i`  | specify the file path **(Required)**
+ `--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `sa`, e.g. `sa.phenotype` **(Optional with default "sa.fam")**
+ `--delimiter <regex>` | `-d`  | specify file delimiter **(Optional with default "\\t")**
+ `--missing <missing-value>` | `-m`  | specify identifiers to be treated as missing, in a comma-separated list **(Optional with default "NA")**
+ `--quantitative`               | `-q` | flag to indicate quantitative phenotype (optional, default is case-control)
 
 The command
 
@@ -178,6 +186,12 @@ This module expects a text file with one column corresponding to the sample id `
 - `-i | --input <path-to-file>` specify the file path **(Required)**
 - `-r | --root <root>` specify the annotation path in which to place the new Boolean annotation, as a period-delimited path starting with `sa` **(Required)**
 
+Argument | Shortcut | Description
+:-: | :-: | ---
+`list`                     | `---` | Invoke this functionality (`annotatesamples list <args>`)
+`--input <file>`            | `-i`  | specify the file path **(Required)**
+`--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `sa`, e.g. `sa.phenotype` **(Required)**
+
 ____
 
 <a name="AnnoVar"></a>
@@ -201,12 +215,18 @@ This module expects text files with multiple delimited columns (default: tab-del
 
 **Command line arguments:**
 
-- `table` Invoke this functionality (`annotatevariants table <args>`)
-- `<files...>` specify the file or files to be read **(Required)**
-- `-r | --root <root>` specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `va` **(Required)**
-- `-v | --vcolumns <variantcols>` Either one column name (if Chr:Pos:Ref:Alt), or four comma-separated column identifiers **(Optional with default "Chromosome, Position, Ref, Alt")**
-- `-t | --types <typestring>` specify data types of fields, in a comma-delimited string of `name: Type` elements.  If a field is not found in this type map, it will be read and stored as a string **(Optional)**
-- `-m | --missing <missing-value>` specify identifiers to be treated as missing, in a comma-separated list **(Optional with default "NA")**
+Argument | Shortcut | Description
+:-: | :-: | ---
+`table`                     | `---` | Invoke this functionality (`annotatevariants table <args>`)
+`<files...>`            | `---`  | specify the file or files to be read **(Required)**
+`--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `va`, e.g. `va.anno` **(Required)**
+`--keys <column-ids>`         | `-k`  | Either one column name (if Chr:Pos:Ref:Alt), or four comma-separated column identifiers **(Optional with default "Chromosome, Position, Ref, Alt")**
+`--types <type-mapping>`    | `-t`  | specify data types of fields, in a comma-delimited string of `name: Type` elements.  **If a field is not found in this type map, it will be read and stored as a string** **(Optional)**
+`--delimiter <regex>` | `-d`  | specify file delimiter **(Optional with default "\\t")**
+`--missing <missing-value>` | `-m`  | specify identifiers to be treated as missing, in a comma-separated list **(Optional with default "NA")**
+`--select <cols-to-use>`     | `-s`  | Only load specific columns, delimited by commas **(Optional, all columns used by default)**
+`--comment <comment-char>`  | `-c`  | Skip lines following in the given string **(Optional)**
+`--no-header`               | `---` | Indicate that the file has no header.  Columns will instead be read as numbered, from `_0, _1, _2, ... _N`
 
 ____
 
@@ -286,11 +306,15 @@ This module annotates variants from JSON files, one JSON object per line.  Varia
 
 **Command line arguments:**
 
-- `json` Invoke this functionality (`annotatevariants json <args>`)
-- `<files...>` specify the file or files to be read **(Required)**
-- `-r | --root <root>` specify the annotation path in which to place the data read from the file, as a period-delimited path starting with `va` **(Required)**
-- `-v | --vfields <variantcols>` Four comma-delimited expressions computing the chromosome (String), position (Int), ref (String) and alts (Array[String]) **(Required)**
-- `-t | --type <typestring>` type of the JSON objects  **(Required)**
+Argument | Shortcut | Description
+:-: | :-: | ---
+`table`                     | `---` | Invoke this functionality (`annotatevariants json <args>`)
+`<files...>`            | `---`  | specify the file or files to be read **(Required)**
+`--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `va`, e.g. `va.anno` **(Required)**
+`--vfields <column-ids>`         | `-v`  | Four comma-delimited expressions computing the chromosome (String), position (Int), ref (String) and alts (Array[String]) **(Required)**
+`--type <typestring>`    | `-t`  | type of the JSON objects  **(Required)**
+
+____
 
 <a name="IntervalList"></a>
 ### Interval list files (.interval_list[.gz])
@@ -299,9 +323,11 @@ Interval list files annotate variants in certain regions of the genome.  Dependi
 
 **Command line arguments:**
 
-- `intervals` Invoke this functionality (`annotatevariants intervals <args>`)
-- `-i | --input <path-to-interval-list>` specify the file path **(Required)**
-- `-r | --root <root>` specify the annotation path in which to place the field read from the interval list, as a period-delimited path starting with `va` **(Required)**
+Argument | Shortcut | Description
+:-: | :-: | ---
+`intervals`                     | `---` | Invoke this functionality (`annotatevariants intervals <args>`)
+`--input <file>`            | `-i`  | path to the file **(Required)**
+`--root <root>`             | `-r`  | specify the annotation path in which to place the field read from the file, as a period-delimited path starting with `va`, e.g. `va.anno` **(Required)**
 
 There are two formats for interval list files.  The first appears as `chromosome:start-end` as below.  This format will annotate variants with a **boolean**, which is `true` if that variant is found in any interval specified in the file and `false` otherwise.
 
@@ -381,9 +407,11 @@ Bed files are on a 0-based coordinate system while VCF files are on a 1-based co
 
 **Command line arguments:**
 
-- `bed` Invoke this functionality (`annotatevariants bed <args>`)
-- `-i | --input <path-to-bed>` specify the file path **(Required)**
-- `-r | --root <root>` specify the annotation path in which to place the field read from the bed, as a period-delimited path starting with `va` **(Required)**
+Argument | Shortcut | Description
+:-: | :-: | ---
+`bed`                     | `---` | Invoke this functionality (`annotatevariants bed <args>`)
+`--input <file>`            | `-i`  | path to the file **(Required)**
+`--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `va`, e.g. `va.anno` **(Required)**
 
 UCSC bed files can have up to 12 fields, but Hail will only ever look at the first four.  The first three fields are required (`chrom`, `chromStart`, and `chromEnd`).  If a fourth column is found, Hail will parse this field as a string and load it into the specified annotation path.  If the bed file has only three columns, Hail will assign each variant a boolean annotation based on whether that variant was a member of any interval.
 
@@ -457,9 +485,11 @@ Hail can read vcf files to annotate a variant dataset.  Since Hail internally ca
 
 **Command line arguments:**
 
-- `vcf` Invoke this functionality (`annotatevariants vcf <args>`)
-- `<files...>` specify the path to the file/files **(Required)**
-- `-r | --root <root>` specify the annotation path in which to place the annotations read from the vcf, as a period-delimited path starting with `va` **(Required)**
+Argument | Shortcut | Description
+:-: | :-: | ---
+`vcf`                     | `---` | Invoke this functionality (`annotatevariants vcf <args>`)
+`<files...>`            | `---`  | specify the file or files to be read **(Required)**
+`--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `va`, e.g. `va.exac` **(Required)**
 
 ____
 
@@ -519,9 +549,11 @@ Hail can also annotate from other VDS files.  This functionality calls out to th
 
 **Command line arguments:**
 
-- `vds` Invoke this functionality (`annotatevariants vds <args>`)
-- `-i <path-to-vds>, --input <path-to-vds>` specify the path to the VDS **(Required)**
-- `-r <root>, --root <root>` specify the annotation path in which to place the annotations read from the vds, as a period-delimited path starting with `va` **(Required)**
+Argument | Shortcut | Description
+:-: | :-: | ---
+`vds`                     | `---` | Invoke this functionality (`annotatevariants vds <args>`)
+`--input <file>`            | `-i`  | specify the file path **(Required)**
+`--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `va`, e.g. `va.exac` **(Required)**
 
 ____
 
@@ -579,8 +611,10 @@ Programmatic annotation means computing new annotations from the existing expose
 
 **Command line arguments:**
 
-- `expr` Invoke this functionality (`annotatevariants expr <args>`)
-- `-c | --condition <condition>`
+Argument | Shortcut | Description
+:-: | :-: | ---
+`expr`                     | `---` | Invoke this functionality (`annotatevariants expr <args>`)
+`--condition <annotation expression>`            | `-c`  | Annotation expression **(Required)**
 
 For more information, see [programmatic annotation documentation](ProgrammaticAnnotation.md)
 
@@ -602,10 +636,12 @@ This module imports a text file "as-is", as either an `Array[String]` (where ord
 
 **Command line arguments:**
 
-- `list` Invoke this functionality (`annotateglobal list <args>`)
-- `-i | --input <file path>` Specify the path to the file **(Required)**
-- `-r | --root <root>` Specify the target namespace in the global table, as a period-delimited path starting with `global` **(Required)**
-- `--as-set` Read the file as a `Set[String]` instead of an `Array[String]` **(Optional)**
+Argument | Shortcut | Description
+:-: | :-: | ---
+`list`                     | `---` | Invoke this functionality (`annotateglobal list <args>`)
+`--input <file>`            | `-i`  | specify the file to be read **(Required)**
+`--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `global`, e.g. `global.genes` **(Required)**
+`--as-set`               | `---` | Indicate that the file should be read as a `Set[String]` instead of an `Array[String]`
 
 ____
 
@@ -651,11 +687,17 @@ This module imports a text file with multiple columns as an `Array[Struct]`.  Th
 
 **Command line arguments:**
 
-- `table` Invoke this functionality (`annotateglobal table <args>`)
-- `-i | --input <path-to-file>` specify the file path **(Required)**
-- `-r | --root <root>` specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `global` **(Required)**
-- `-t | --types <typestring>` specify data types of fields, in a comma-delimited string of `name: Type` elements.  **If a field is not found in this type map, it will be read and stored as a string** **(Optional)**
-- `-m | --missing <missing-value>` specify identifiers to be treated as missing, in a comma-separated list **(Optional with default "NA")**
+Argument | Shortcut | Description
+:-: | :-: | ---
+`table`                     | `---` | Invoke this functionality (`annotateglobal table <args>`)
+`--input <file>`            | `-i`  | specify the file to be read **(Required)**
+`--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `global`, e.g. `global.PLI` **(Required)**
+`--types <type-mapping>`    | `-t`  | specify data types of fields, in a comma-delimited string of `name: Type` elements.  **If a field is not found in this type map, it will be read and stored as a string** **(Optional)**
+`--delimiter <regex>` | `-d`  | specify file delimiter **(Optional with default "\\t")**
+`--missing <missing-value>` | `-m`  | specify identifiers to be treated as missing, in a comma-separated list **(Optional with default "NA")**
+`--select <cols-to-use>`     | `-s`  | Only load specific columns, delimited by commas **(Optional, all columns used by default)**
+`--comment <comment-char>`  | `-c`  | Skip lines following in the given string **(Optional)**
+`--no-header`               | `---` | Indicate that the file has no header.  Columns will instead be read as numbered, from `_0, _1, _2, ... _N`
  
 **Example**
 
@@ -721,8 +763,10 @@ Programmatic annotation means computing new annotations from the existing expose
  
 **Command line arguments:**
 
-- `expr` Invoke this functionality (`annotateglobal expr <args>`)
-- `-c | --condition <condition>` **(Required)**
+Argument | Shortcut | Description
+:-: | :-: | ---
+`expr`                     | `---` | Invoke this functionality (`annotateglobal expr <args>`)
+`--condition <annotation expression>`            | `-c`  | Annotation expression **(Required)**
 
 For more information, see [programmatic annotation documentation](ProgrammaticAnnotation.md)
 

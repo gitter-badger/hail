@@ -33,9 +33,9 @@ object AnnotateSamplesTable extends Command {
       usage = "Select only certain columns.  Enter columns to keep as a comma-separated list")
     var select: String = _
 
-    @Args4jOption(required = false, name = "--noheader",
-      usage = "indicate that the file has no header and columns should be indicated by number (0-indexed)")
-    var noheader: Boolean = _
+    @Args4jOption(required = false, name = "--no-header",
+      usage = "indicate that the file has no header and columns should be indicated by `_1, _2, ... _N' (0-indexed)")
+    var noHeader: Boolean = _
 
     @Args4jOption(required = false, name = "-d", aliases = Array("--delimiter"),
       usage = "Field delimiter regex")
@@ -50,7 +50,7 @@ object AnnotateSamplesTable extends Command {
 
   def name = "annotatesamples table"
 
-  def description = "Annotate samples with a text table"
+  def description = "Annotate samples with a delimited text file"
 
   def supportsMultiallelic = true
 
@@ -65,7 +65,7 @@ object AnnotateSamplesTable extends Command {
       types = Parser.parseAnnotationTypes(options.types),
       keyCols = Array(options.keyCol),
       useCols = Option(options.select).map(o => Parser.parseIdentifierList(o)),
-      hasHeader = !options.noheader,
+      noHeader = options.noHeader,
       separator = options.separator,
       missing = options.missingIdentifier,
       commentChar = Option(options.commentChar))

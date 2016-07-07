@@ -31,7 +31,7 @@ object ImportAnnotationsTable extends Command {
       usage = "Specify identifier to be treated as missing")
     var missingIdentifier: String = "NA"
 
-    @Args4jOption(required = false, name = "-v", aliases = Array("--vcolumns"),
+    @Args4jOption(required = false, name = "-k", aliases = Array("--keys"),
       usage = "Specify the column identifiers for chromosome, position, ref, and alt (in that order)")
     var vCols: String = "Chromosome,Position,Ref,Alt"
 
@@ -39,9 +39,9 @@ object ImportAnnotationsTable extends Command {
       usage = "Select only certain columns.  Enter columns to keep as a comma-separated list")
     var select: String = _
 
-    @Args4jOption(required = false, name = "--noheader", usage =
-      "indicate that the file has no header and columns should be indicated by number (0-indexed)")
-    var noheader: Boolean = _
+    @Args4jOption(required = false, name = "--no-header", usage =
+      "indicate that the file has no header and columns should be indicated by `_1, _2, ... _N' (0-indexed)")
+    var noHeader: Boolean = _
 
     @Args4jOption(required = false, name = "-d", aliases = Array("--delimiter"),
       usage = "Field delimiter regex")
@@ -53,14 +53,13 @@ object ImportAnnotationsTable extends Command {
 
     @Argument(usage = "<files...>")
     var arguments: java.util.ArrayList[String] = new java.util.ArrayList[String]()
-
   }
 
   def newOptions = new Options
 
   def name = "importannotations table"
 
-  def description = "Import variants and annotations from a TSV file as a sites-only VDS"
+  def description = "Import variants and annotations from a delimited text file as a sites-only VDS"
 
   def requiresVDS = false
 
@@ -83,7 +82,7 @@ object ImportAnnotationsTable extends Command {
       types = Parser.parseAnnotationTypes(options.types) + keySig,
       keyCols = vCols,
       useCols = Option(options.select).map(o => Parser.parseIdentifierList(o)),
-      hasHeader = !options.noheader,
+      noHeader = options.noHeader,
       separator = options.separator,
       missing = options.missingIdentifier,
       commentChar = Option(options.commentChar))
@@ -99,7 +98,8 @@ object ImportAnnotationsTable extends Command {
         val pl = parser(line.value)
         val v = pl.key match {
           case Array(variant) => variant.asInstanceOf[Variant]
-          case Array(chr, pos, ref, alt) => Variant(chr.asInstanceOf[String], pos.asInstanceOf[Int], ref.asInstanceOf[String], alt.asInstanceOf[String])
+          case Array(chr, pos, ref, alt) =>
+            Variant(chr.asInstanceOf[String], pos.asInstanceOf[Int], ref.asInstanceOf[String], alt.asInstanceOf[String])
         }
 
         (v, pl.value): (Variant, Annotation)

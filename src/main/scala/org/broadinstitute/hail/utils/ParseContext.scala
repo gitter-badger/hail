@@ -13,7 +13,7 @@ case class ParseSettings(types: Map[String, Type] = Map.empty[String, Type],
   commentChar: Option[String] = None,
   separator: String = "\t",
   missing: String = "NA",
-  hasHeader: Boolean = true)
+  noHeader: Boolean = false)
 
 object ParseContext {
 
@@ -27,29 +27,35 @@ object ParseContext {
     val commentChar = settings.commentChar
     val sep = settings.separator
     val missing = settings.missing
-    val hasHeader = settings.hasHeader
+    val noHeader = settings.noHeader
 
     val keySet = keyCols.toSet
 
     readFile(filename, hConf) { dis =>
       val lines = Source.fromInputStream(dis)
         .getLines()
+        .filter(line => commentChar.forall(pattern => !line.startsWith(pattern)))
 
-      val head = if (lines.isEmpty)
+      if (lines.isEmpty)
         fatal(
           s"""invalid table file: empty
               |  Offending file: `$filename'
            """.stripMargin)
-      else commentChar
-        .map(toDrop => lines.dropWhile(_.startsWith(toDrop)))
-        .getOrElse(lines)
-        .next()
 
-      val columns = if (hasHeader)
+      val head = lines.next()
+
+      val columns = if (noHeader) {
+        head.split(sep)
+          .zipWithIndex
+          .map { case (_, i) => s"_$i" }
+      }
+      else
         head.split(sep).map(escapeString)
-      else head.split(sep)
-        .zipWithIndex
-        .map { case (_, i) => i.toString }
+
+      val duplicates = columns.duplicates()
+      if (duplicates.nonEmpty) {
+        fatal(s"invalid header: found duplicate columns [${duplicates.map(x => '"' + x + '"').mkString(", ")}]")
+      }
 
       def check(toCheck: Iterable[String], msg: String) {
         val colSet = columns.toSet
@@ -57,21 +63,19 @@ object ParseContext {
           if (!colSet.contains(col))
             fatal(
               s"""$msg: column `$col' not found.
-                 |  Detected columns: [${columns.mkString(",")}]
+                 |  Detected columns: [${columns.map(x => '"' + x + '"').mkString(", ")}]
                """.stripMargin)
         }
       }
 
       useCols.foreach(included => check(included, "invalid column inclusions"))
-
       check(keyCols, "invalid key columns")
-
       check(types.keys, "invalid type mapping")
 
       val filter: (String) => Boolean = (line: String) => {
-        if (hasHeader)
-          line != head
-        else true
+        if (noHeader)
+          true
+        else line != head
       } && commentChar.forall(ch => !line.startsWith(ch))
 
       val colIndexMap = columns.zipWithIndex.toMap
@@ -85,7 +89,7 @@ object ParseContext {
       if (usedColsAndIndices.isEmpty)
         fatal("no columns used")
 
-      val targetSize = usedColsAndIndices.length + keySet.size
+      val targetSize = columns.length
       val fCheck = (arr: Array[String]) =>
         if (arr.length != targetSize)
           fatal(s"expected $targetSize fields, but found ${arr.length} fields")

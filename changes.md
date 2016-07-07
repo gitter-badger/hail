@@ -1,3 +1,12 @@
+ - Changes to all `table` commands that parse text files.
+    - option `-s, --samplecol` in `annotatesamples table` has been renamed to `-k, --key`
+    - option `-v, --vcolumns` in `annotatevariants table` has been renamed to `-k, --keys`
+    - added a few more options to all `table` commands:
+    - `--select`: optional argument, takes a comma-delimited set of columns, and will only read these
+    - `--comment`: optional argument.  Will skip any line starting in the given string.
+    - `--no-header`: indicates that the file(s) don't have a header, and columns will be read as "_0", "_1", ... "_N".  You can use the other arguments with these columns, e.g. `--key _2`.
+
+____
 
  - Added `imputesex` which imputes the sex from variant data using the same method as PLINK. [see docs for details](docs/ImputeSex.md)
  

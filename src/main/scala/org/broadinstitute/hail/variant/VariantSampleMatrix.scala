@@ -528,7 +528,11 @@ class VariantSampleMatrix[T](val metadata: VariantMetadata,
           case (v, (Some((va1, it1)), Some((va2, it2)))) =>
             val annotationsSame = va1 == va2
             if (!annotationsSame)
-              println(s"annotations $va1, $va2 were not the same")
+              println(
+                s"""annotations were not the same:
+                   |  $va1
+                   |  $va2
+                 """.stripMargin)
             val genotypesSame = (it1, it2).zipped.forall { case (g1, g2) =>
               if (g1 != g2)
                 println(s"genotypes $g1, $g2 were not the same")

@@ -165,7 +165,7 @@ class ImportAnnotationsSuite extends SparkSuite {
       }
 
     val anno1alternate = AnnotateVariants.run(state,
-      Array("table", "src/test/resources/variantAnnotations.alternateformat.tsv", "--vcolumns",
+      Array("table", "src/test/resources/variantAnnotations.alternateformat.tsv", "--keys",
         "`Chromosome:Position:Ref:Alt`", "-t", "Rand1:Double,Rand2:Double", "-r", "va.stuff"))
 
     val anno1glob = AnnotateVariants.run(state, Array("table", "src/test/resources/variantAnnotations.split.*.tsv",
@@ -311,6 +311,102 @@ class ImportAnnotationsSuite extends SparkSuite {
           assert(q(vds2.sampleAnnotations(i)) == Some(5))
       }
 
+  }
+
+  @Test def testTables() {
+
+    val format1 =
+      """Chr Pos        Ref   Alt   Anno1   Anno2
+        |22  16050036   A     C     0.123   var1
+        |22  16050115   G     A     0.234   var2
+        |22  16050159   C     T     0.345   var3
+        |22  16050213   C     T     0.456   var4""".stripMargin
+
+    val format2 =
+      """# This line has some garbage
+        |### this line too
+        |## and this one
+        |Chr Pos        Ref   Alt   Anno1   Anno2
+        |22  16050036   A     C     0.123   var1
+        |22  16050115   G     A     0.234   var2
+        |22  16050159   C     T     0.345   var3
+        |22  16050213   C     T     0.456   var4""".stripMargin
+
+    val format3 =
+      """# This line has some garbage
+        |### this line too
+        |## and this one
+        |22  16050036   A     C     0.123   var1
+        |22  16050115   G     A     0.234   var2
+        |22  16050159   C     T     0.345   var3
+        |22  16050213   C     T     0.456   var4""".stripMargin
+
+    val format4 =
+      """22,16050036,A,C,0.123,var1
+        |22,16050115,G,A,0.234,var2
+        |22,16050159,C,T,0.345,var3
+        |22,16050213,C,T,0.456,var4""".stripMargin
+
+    val format5 =
+      """Chr Pos        Ref   Alt   OtherCol1  Anno1   OtherCol2  Anno2   OtherCol3
+        |22  16050036   A     C     .          0.123   .          var1    .
+        |22  16050115   G     A     .          0.234   .          var2    .
+        |22  16050159   C     T     .          0.345   .          var3    .
+        |22  16050213   C     T     .          0.456   .          var4    .""".stripMargin
+
+    val format6 =
+      """!asdasd
+        |!!astasd
+        |!!!asdagaadsa
+        |22,16050036,A,C,...,0.123,...,var1,...
+        |22,16050115,G,A,...,0.234,...,var2,...
+        |22,16050159,C,T,...,0.345,...,var3,...
+        |22,16050213,C,T,...,0.456,...,var4,...""".stripMargin
+
+    val tmpf1 = tmpDir.createTempFile("f1", ".txt")
+    val tmpf2 = tmpDir.createTempFile("f2", ".txt")
+    val tmpf3 = tmpDir.createTempFile("f3", ".txt")
+    val tmpf4 = tmpDir.createTempFile("f4", ".txt")
+    val tmpf5 = tmpDir.createTempFile("f5", ".txt")
+    val tmpf6 = tmpDir.createTempFile("f6", ".txt")
+
+    writeTextFile(tmpf1, hadoopConf) { out => out.write(format1)}
+    writeTextFile(tmpf2, hadoopConf) { out => out.write(format2)}
+    writeTextFile(tmpf3, hadoopConf) { out => out.write(format3)}
+    writeTextFile(tmpf4, hadoopConf) { out => out.write(format4)}
+    writeTextFile(tmpf5, hadoopConf) { out => out.write(format5)}
+    writeTextFile(tmpf6, hadoopConf) { out => out.write(format6)}
+
+    val s = SplitMulti.run(State(sc, sqlContext, LoadVCF(sc, "src/test/resources/sample.vcf")))
+    val fmt1 = AnnotateVariants.run(s, Array("table", tmpf1, "-d", "\\s+", "-k", "Chr, Pos, Ref, Alt", "-r", "va.anno"))
+
+    val fmt2 = AnnotateVariants.run(s, Array("table", tmpf2, "-d", "\\s+", "-k", "Chr, Pos, Ref, Alt", "-c", "#",
+      "-r", "va.anno"))
+
+    val fmt3pre = AnnotateVariants.run(s, Array("table", tmpf3, "-d", "\\s+", "-v", "_0, _1, _2, _3", "-c", "#", "--no-header",
+      "-r", "va.anno"))
+    val fmt3 = AnnotateVariants.run(fmt3pre, Array("expr", "-c",
+      """va.anno = if (isMissing(va.anno)) NA: Struct{Anno1: String, Anno2: String} else {"Anno1": va.anno._4, "Anno2": va.anno._5}"""))
+
+    val fmt4pre = AnnotateVariants.run(s, Array("table", tmpf4, "-d", ",", "-v", "_0, _1, _2, _3", "--no-header",
+      "-r", "va.anno"))
+    val fmt4 = AnnotateVariants.run(fmt4pre, Array("expr", "-c",
+      """va.anno = if (isMissing(va.anno)) NA: Struct{Anno1: String, Anno2: String} else {"Anno1": va.anno._4, "Anno2": va.anno._5}"""))
+
+    val fmt5 = AnnotateVariants.run(s, Array("table", tmpf5, "-d", "\\s+", "-v", "Chr, Pos, Ref, Alt", "-r", "va.anno",
+      "-s", "Anno1, Anno2"))
+
+    val fmt6pre = AnnotateVariants.run(s, Array("table", tmpf6, "-d", ",", "-v", "_0, _1, _2, _3", "--no-header", "-c", "!",
+      "-r", "va.anno", "-s", "_5, _7"))
+    val fmt6 = AnnotateVariants.run(fmt6pre, Array("expr", "-c",
+      """va.anno = if (isMissing(va.anno)) NA: Struct{Anno1: String, Anno2: String} else {"Anno1": va.anno._5, "Anno2": va.anno._7}"""))
+
+    val vds1 = fmt1.vds.cache()
+    assert(vds1.same(fmt2.vds))
+    assert(vds1.same(fmt3.vds))
+    assert(vds1.same(fmt4.vds))
+    assert(vds1.same(fmt5.vds))
+    assert(vds1.same(fmt6.vds))
   }
 }
 
