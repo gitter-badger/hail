@@ -383,20 +383,20 @@ class ImportAnnotationsSuite extends SparkSuite {
     val fmt2 = AnnotateVariants.run(s, Array("table", tmpf2, "-d", "\\s+", "-k", "Chr, Pos, Ref, Alt", "-c", "#",
       "-r", "va.anno"))
 
-    val fmt3pre = AnnotateVariants.run(s, Array("table", tmpf3, "-d", "\\s+", "-v", "_0, _1, _2, _3", "-c", "#", "--no-header",
+    val fmt3pre = AnnotateVariants.run(s, Array("table", tmpf3, "-d", "\\s+", "-k", "_0, _1, _2, _3", "-c", "#", "--no-header",
       "-r", "va.anno"))
     val fmt3 = AnnotateVariants.run(fmt3pre, Array("expr", "-c",
       """va.anno = if (isMissing(va.anno)) NA: Struct{Anno1: String, Anno2: String} else {"Anno1": va.anno._4, "Anno2": va.anno._5}"""))
 
-    val fmt4pre = AnnotateVariants.run(s, Array("table", tmpf4, "-d", ",", "-v", "_0, _1, _2, _3", "--no-header",
+    val fmt4pre = AnnotateVariants.run(s, Array("table", tmpf4, "-d", ",", "-k", "_0, _1, _2, _3", "--no-header",
       "-r", "va.anno"))
     val fmt4 = AnnotateVariants.run(fmt4pre, Array("expr", "-c",
       """va.anno = if (isMissing(va.anno)) NA: Struct{Anno1: String, Anno2: String} else {"Anno1": va.anno._4, "Anno2": va.anno._5}"""))
 
-    val fmt5 = AnnotateVariants.run(s, Array("table", tmpf5, "-d", "\\s+", "-v", "Chr, Pos, Ref, Alt", "-r", "va.anno",
+    val fmt5 = AnnotateVariants.run(s, Array("table", tmpf5, "-d", "\\s+", "-k", "Chr, Pos, Ref, Alt", "-r", "va.anno",
       "-s", "Anno1, Anno2"))
 
-    val fmt6pre = AnnotateVariants.run(s, Array("table", tmpf6, "-d", ",", "-v", "_0, _1, _2, _3", "--no-header", "-c", "!",
+    val fmt6pre = AnnotateVariants.run(s, Array("table", tmpf6, "-d", ",", "-k", "_0, _1, _2, _3", "--no-header", "-c", "!",
       "-r", "va.anno", "-s", "_5, _7"))
     val fmt6 = AnnotateVariants.run(fmt6pre, Array("expr", "-c",
       """va.anno = if (isMissing(va.anno)) NA: Struct{Anno1: String, Anno2: String} else {"Anno1": va.anno._5, "Anno2": va.anno._7}"""))
