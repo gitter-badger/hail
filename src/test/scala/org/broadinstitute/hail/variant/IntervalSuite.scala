@@ -110,7 +110,7 @@ class IntervalSuite extends SparkSuite {
   }
 
   @Test def testAggregate() {
-    val vds = LoadVCF(sc, "src/test/resources/sample2.vcf").cache()
+    val vds = LoadVCF(sc, "src/test/resources/sample2.vcf", nPartitions = Some(2)).cache()
     val state = SplitMulti.run(State(sc, sqlContext, vds))
     val iList = tmpDir.createTempFile("input", ".interval_list")
     val tmp1 = tmpDir.createTempFile("output", ".tsv")

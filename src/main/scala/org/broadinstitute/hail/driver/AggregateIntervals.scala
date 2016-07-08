@@ -82,7 +82,7 @@ object AggregateIntervals extends Command {
     }, { case (m1, m2) =>
       m2.foreach { case (interval, res) =>
         val m1Results = m1.getOrElse(interval, zVals)
-        m1 + (interval -> combOp(res, m1Results))
+        m1 += (interval -> combOp(res, m1Results))
       }
       m1
     })
