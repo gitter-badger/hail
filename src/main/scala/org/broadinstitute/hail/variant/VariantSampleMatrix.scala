@@ -110,8 +110,7 @@ object VariantSampleMatrix {
     val metadata = readMetadata(sqlContext, dirname, skipGenotypes)
     val vaSignature = metadata.vaSignature
 
-    val df = new PartitionedDataFrameReader(sqlContext).parquet(dirname + "/rdd.parquet")
-//    val df = sqlContext.read.parquet(dirname + "/rdd.parquet")
+    val df = sqlContext.readPartitioned.parquet(dirname + "/rdd.parquet")
 
     val vaRequiresConversion = vaSignature.requiresConversion
 

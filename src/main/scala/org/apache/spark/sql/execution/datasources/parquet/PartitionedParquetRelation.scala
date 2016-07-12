@@ -5,16 +5,13 @@ import java.util.concurrent.TimeUnit
 import java.util.logging.{Logger => JLogger}
 import java.util.{List => JList}
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.FileInputFormat
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.util.StopWatch
-import org.apache.parquet.hadoop.{ParquetInputSplit, _}
-import org.apache.parquet.hadoop.util.ContextUtil
-import org.apache.parquet.{Preconditions, Log => ApacheParquetLog}
+import org.apache.parquet.hadoop._
+import org.apache.parquet.{Log => ApacheParquetLog}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
@@ -26,17 +23,6 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.{Partition => SparkPartition}
 
 import scala.collection.JavaConversions._
-
-object PartitionedParquetRelation {
-  val partRegex = "part-r-(\\d+)-.*\\.parquet.*".r
-
-  def getPartNumber(fname: String): Int = {
-    fname match {
-      case partRegex(i) => i.toInt
-      case _ => throw new PathIOException("no match")
-    }
-  }
-}
 
 class PartitionedParquetRelation(paths: Array[String],
   maybeDataSchema: Option[StructType],
@@ -74,13 +60,8 @@ class PartitionedParquetRelation(paths: Array[String],
         assumeInt96IsTimestamp,
         followParquetFormatSpec) _
 
-    println("input files:")
-    inputFiles.foreach(fs => println(fs.getPath.getName))
-    val sorted = inputFiles.sortBy(fs => PartitionedParquetRelation.getPartNumber(fs.getPath.getName))
-//    sorted.foreach(fs => println(fs.getPath.getName))
-    // Create the function to set input paths at the driver side.
     val setInputPaths =
-      ParquetRelation.initializeDriverSideJobFunc(sorted, parquetBlockSize) _
+      ParquetRelation.initializeDriverSideJobFunc(inputFiles, parquetBlockSize) _
 
     Utils.withDummyCallSite(sqlContext.sparkContext) {
       new SqlNewHadoopRDD(
@@ -93,7 +74,7 @@ class PartitionedParquetRelation(paths: Array[String],
 
         val cacheMetadata = useMetadataCache
 
-        @transient val cachedStatuses = sorted.map { f =>
+        @transient val cachedStatuses = inputFiles.map { f =>
           // In order to encode the authority of a Path containing special characters such as '/'
           // (which does happen in some S3N credentials), we need to use the string returned by the
           // URI of the path to create a new Path.
@@ -121,11 +102,7 @@ class PartitionedParquetRelation(paths: Array[String],
           val jobContext = newJobContext(getConf(isDriverSide = true), jobId)
           val rawSplits = inputFormat.getSplits(jobContext)
 
-//          println("PARTITIONS")
-//          rawSplits.foreach(is => println(is.asInstanceOf[FileSplit].getPath.getName))
-
           Array.tabulate[SparkPartition](rawSplits.size) { i =>
-            println(rawSplits(i))
             new SqlNewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
           }
         }
@@ -135,25 +112,6 @@ class PartitionedParquetRelation(paths: Array[String],
 }
 
 class PartitionedParquetInputFormat[T] extends ParquetInputFormat[T] {
-//  override def getSplits(jobContext: JobContext): JList[InputSplit] = {
-//    val configuration: Configuration = ContextUtil.getConfiguration(jobContext)
-//    val splits: JList[InputSplit] = new java.util.ArrayList[InputSplit]
-//    if (ParquetInputFormat.isTaskSideMetaData(configuration)) {
-//      import scala.collection.JavaConversions._
-//      for (split <- super.getSplits(jobContext)) {
-//        Preconditions.checkArgument(split.isInstanceOf[FileSplit], "Cannot wrap non-FileSplit: " + split)
-//
-//        val fsplit = split.asInstanceOf[FileSplit]
-//        val newSplit = new ParquetInputSplit(fsplit.getPath, fsplit.getStart, fsplit.getStart + fsplit.getLength, fsplit.getLength, fsplit.getLocations, null)
-//        splits.add(newSplit)
-//      }
-//      return splits
-//    }
-//    else {
-//      splits.addAll(getSplits(jobContext))
-//    }
-//    splits
-//  }
 
   val partRegex = "part-r-(\\d+)-.*\\.parquet.*".r
 
@@ -170,8 +128,8 @@ class PartitionedParquetInputFormat[T] extends ParquetInputFormat[T] {
     val files: JList[FileStatus] = listStatus(job)
     import scala.collection.JavaConverters._
 
-    val f = files.asScala.toArray.sortBy(fs => fs.getPath.getName).toList
-    for (file <- f) {
+    val sorted = files.asScala.toArray.sortBy(fs => fs.getPath.getName).toList
+    for (file <- sorted) {
       val path: Path = file.getPath
       val length: Long = file.getLen
       if (length != 0) {
@@ -184,7 +142,7 @@ class PartitionedParquetInputFormat[T] extends ParquetInputFormat[T] {
           blkLocations = fs.getFileBlockLocations(file, 0, length)
         }
 
-          splits.add(makeSplit(path, 0, length, blkLocations(0).getHosts, blkLocations(0).getCachedHosts))
+        splits.add(makeSplit(path, 0, length, blkLocations(0).getHosts, blkLocations(0).getCachedHosts))
       }
       else {
         splits.add(makeSplit(path, 0, length, new Array[String](0)))
@@ -195,8 +153,6 @@ class PartitionedParquetInputFormat[T] extends ParquetInputFormat[T] {
     if (FileInputFormat.LOG.isDebugEnabled) {
       FileInputFormat.LOG.debug("Total # of splits generated by getSplits: " + splits.size + ", TimeTaken: " + sw.now(TimeUnit.MILLISECONDS))
     }
-    println("returning splits...")
-    splits.foreach(s => println(s.asInstanceOf[FileSplit].getPath.getName))
     splits
   }
 }

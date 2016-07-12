@@ -12,36 +12,21 @@ class PartitioningSuite extends SparkSuite {
   @Test def testParquetWriteRead() {
     Prop.forAll(VariantSampleMatrix.gen(sc, Genotype.gen(_))) { vds =>
       var state = State(sc, sqlContext, vds)
-      state = Repartition.run(state, Array("-n", "4"))
+      state = Repartition.run(state, Array("-n", "5"))
       val out = tmpDir.createTempFile("out", ".vds")
       state = Write.run(state, Array("-o", out))
       val readback = Read.run(state, Array("-i", out))
 
-      println("orig:")
-      state.vds.rdd.mapPartitionsWithIndex({ (ind: Int, it: Iterator[(Variant, Annotation, Iterable[Genotype])]) =>
-        println(s"partition $ind: ${it.next._1}")
-        it
-      }).collect()
+      state.vds.variantsAndAnnotations
+        .zipPartitions(readback.vds.variantsAndAnnotations)(
+          {(it1: Iterator[(Variant, Annotation)],
+        it2: Iterator[(Variant, Annotation)]) => it1.zip(it2)})
+        .collect()
+        .foreach{ case (t1, t2) =>
+          assert(t1 == t2)
+        }
 
-      println("rb:")
-      readback.vds.rdd.mapPartitionsWithIndex({ (ind: Int, it: Iterator[(Variant, Annotation, Iterable[Genotype])]) =>
-        println(s"partition $ind: ${it.next._1}")
-        it
-      }).collect()
-
-      val origFirst = vds.rdd.first()
-      val readFirst = readback.vds.rdd.first()
-
-      val p = origFirst == readFirst
-
-      if (!p) {
-        println(
-          s"""found mismatched partitions:
-              |  original: $origFirst
-              |  readback: $readFirst
-           """.stripMargin)
-      }
-      p
-    }.check()
+      true
+    }.check(count = 10)
   }
 }
