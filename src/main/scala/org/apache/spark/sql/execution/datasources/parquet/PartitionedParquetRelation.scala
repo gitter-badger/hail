@@ -128,7 +128,7 @@ class PartitionedParquetInputFormat[T] extends ParquetInputFormat[T] {
     val files: JList[FileStatus] = listStatus(job)
     import scala.collection.JavaConverters._
 
-    val sorted = files.asScala.toArray.sortBy(fs => fs.getPath.getName).toList
+    val sorted = files.asScala.toArray.sortBy(fs => getPartNumber(fs.getPath.getName)).toList
     for (file <- sorted) {
       val path: Path = file.getPath
       val length: Long = file.getLen
