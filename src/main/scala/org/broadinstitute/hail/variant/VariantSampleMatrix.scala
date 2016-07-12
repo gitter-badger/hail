@@ -6,7 +6,7 @@ import java.util
 import org.kududb.spark.kudu._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{PartitionedDataFrameReader, Row, SQLContext}
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.broadinstitute.hail.Utils._
 import org.broadinstitute.hail.annotations._
@@ -110,7 +110,8 @@ object VariantSampleMatrix {
     val metadata = readMetadata(sqlContext, dirname, skipGenotypes)
     val vaSignature = metadata.vaSignature
 
-    val df = sqlContext.read.parquet(dirname + "/rdd.parquet")
+    val df = new PartitionedDataFrameReader(sqlContext).parquet(dirname + "/rdd.parquet")
+//    val df = sqlContext.read.parquet(dirname + "/rdd.parquet")
 
     val vaRequiresConversion = vaSignature.requiresConversion
 
