@@ -7,6 +7,7 @@ import org.broadinstitute.hail.annotations.{Annotation, _}
 import org.broadinstitute.hail.variant.{AltAllele, Genotype, Sample, Variant}
 import org.json4s._
 import org.json4s.jackson.Serialization
+import org.json4s.jackson.JsonMethods
 
 abstract class AnnotationImpex[T, A] {
   // FIXME for now, schema must be specified on import
@@ -15,6 +16,8 @@ abstract class AnnotationImpex[T, A] {
   def exportAnnotation(a: Annotation, t: Type): A
 
   def importAnnotation(a: A, t: Type): Annotation
+
+  def supportsType(t: Type): Boolean
 }
 
 object SparkAnnotationImpex extends AnnotationImpex[DataType, Any] {
@@ -126,6 +129,8 @@ object SparkAnnotationImpex extends AnnotationImpex[DataType, Any] {
         case _ => a
       }
   }
+
+  def supportsType(t: Type): Boolean = true
 }
 
 case class JSONExtractGenotype(
@@ -303,4 +308,59 @@ object JSONAnnotationImpex extends AnnotationImpex[Type, JValue] {
     }
   }
 
+  def supportsType(t: Type): Boolean = true
+}
+
+object TableAnnotationImpex extends AnnotationImpex[Unit, String] {
+
+  private val sb = new StringBuilder
+
+  // Tables have no schema
+  def exportType(t: Type): Unit = ()
+
+  def exportAnnotation(a: Annotation, t: Type): String = {
+    if (a == null)
+      "NA"
+    else {
+      t match {
+        case TDouble => a.asInstanceOf[Double].formatted("%.4e")
+        case TString => a.asInstanceOf[String]
+        case d: TDict => JsonMethods.compact(d.toJSON(a))
+        case it: TIterable => JsonMethods.compact(it.toJSON(a))
+        case t: TStruct => JsonMethods.compact(t.toJSON(a))
+        case _ => a.toString
+      }
+    }
+  }
+
+  def importAnnotation(a: String, t: Type): Annotation = {
+    if (!supportsType(t))
+      fatal(
+        s"""type `$t' does not support text parsing.
+           |  Supported types: ${supportedTypes.map(_.toString).toArray.sorted.mkString(", ")}
+         """.stripMargin)
+
+    (t: @unchecked) match {
+      case TString => a
+      case TInt => a.toInt
+      case TLong => a.toLong
+      case TFloat => a.toFloat
+      case TDouble => a.toDouble
+      case TBoolean => a.toBoolean
+      case TVariant => a.split(":") match {
+        case Array(chr, pos, ref, alt) => Variant(chr, pos.toInt, ref, alt.split(","))
+      }
+    }
+  }
+
+  val supportedTypes: Set[Type] = Set(
+    TString,
+    TInt,
+    TLong,
+    TFloat,
+    TDouble,
+    TBoolean,
+    TVariant)
+
+  def supportsType(t: Type): Boolean = supportedTypes(t)
 }

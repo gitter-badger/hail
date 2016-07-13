@@ -12,10 +12,6 @@ import org.json4s.jackson.JsonMethods._
 import scala.reflect.ClassTag
 
 
-trait Parsable {
-  def parse(s: String): Annotation
-}
-
 sealed abstract class BaseType extends Serializable {
   def typeCheck(a: Any): Boolean
 }
@@ -111,12 +107,10 @@ abstract class Type extends BaseType {
   def genValue: Gen[Annotation] = Gen.const(Annotation.empty)
 }
 
-case object TBoolean extends Type with Parsable {
+case object TBoolean extends Type {
   override def toString = "Boolean"
 
   def typeCheck(a: Any): Boolean = a == null || a.isInstanceOf[Boolean]
-
-  def parse(s: String): Annotation = s.toBoolean
 
   override def genValue: Gen[Annotation] = Gen.arbBoolean
 }
@@ -155,7 +149,7 @@ abstract class TIntegral extends TNumeric {
   def makeLong[U](a: Any): Long
 }
 
-case object TInt extends TIntegral with Parsable {
+case object TInt extends TIntegral {
   override def toString = "Int"
 
   def makeDouble[U](a: Any): Double = a.asInstanceOf[Int].toDouble
@@ -164,12 +158,10 @@ case object TInt extends TIntegral with Parsable {
 
   def typeCheck(a: Any): Boolean = a == null || a.isInstanceOf[Int]
 
-  def parse(s: String): Annotation = s.toInt
-
   override def genValue: Gen[Annotation] = Gen.arbInt
 }
 
-case object TLong extends TIntegral with Parsable {
+case object TLong extends TIntegral {
   override def toString = "Long"
 
   def makeDouble[U](a: Any): Double = a.asInstanceOf[Long].toDouble
@@ -178,41 +170,33 @@ case object TLong extends TIntegral with Parsable {
 
   def typeCheck(a: Any): Boolean = a == null || a.isInstanceOf[Long]
 
-  def parse(s: String): Annotation = s.toLong
-
   override def genValue: Gen[Annotation] = Gen.arbLong
 }
 
-case object TFloat extends TNumeric with Parsable {
+case object TFloat extends TNumeric {
   override def toString = "Float"
 
   def makeDouble[U](a: Any): Double = a.asInstanceOf[Float].toDouble
 
   def typeCheck(a: Any): Boolean = a == null || a.isInstanceOf[Float]
 
-  def parse(s: String): Annotation = s.toFloat
-
   override def genValue: Gen[Annotation] = Gen.arbDouble.map(_.toFloat)
 }
 
-case object TDouble extends TNumeric with Parsable {
+case object TDouble extends TNumeric {
   override def toString = "Double"
 
   def makeDouble[U](a: Any): Double = a.asInstanceOf[Double]
 
   def typeCheck(a: Any): Boolean = a == null || a.isInstanceOf[Double]
 
-  def parse(s: String): Annotation = s.toDouble
-
   override def genValue: Gen[Annotation] = Gen.arbDouble
 }
 
-case object TString extends Type with Parsable {
+case object TString extends Type {
   override def toString = "String"
 
   def typeCheck(a: Any): Boolean = a == null || a.isInstanceOf[String]
-
-  def parse(s: String): Annotation = s
 
   override def genValue: Gen[Annotation] = Gen.arbString
 }

@@ -46,16 +46,16 @@ object ExportGenotypes extends Command {
     val sas = vds.saSignature
 
     val symTab = Map(
-      "v" ->(0, TVariant),
-      "va" ->(1, vas),
-      "s" ->(2, TSample),
-      "sa" ->(3, sas),
-      "g" ->(4, TGenotype))
+      "v" -> (0, TVariant),
+      "va" -> (1, vas),
+      "s" -> (2, TSample),
+      "sa" -> (3, sas),
+      "g" -> (4, TGenotype))
 
     val ec = EvalContext(symTab)
 
     val (header, fs) = if (cond.endsWith(".columns")) {
-      val (h, functions) = ExportTSV.parseColumnsFile(ec, cond, sc.hadoopConfiguration)
+      val (h, functions) = Parser.parseColumnsFile(ec, cond, sc.hadoopConfiguration)
       (Some(h), functions)
     }
     else
@@ -84,15 +84,12 @@ object ExportGenotypes extends Command {
           a(2) = s
           a(3) = sa
           a(4) = g
+
           sb.clear()
-          var first = true
-          fs.foreach { f =>
-            if (first)
-              first = false
-            else
-              sb += '\t'
-            sb.tsvAppend(f())
-          }
+
+          fs.iterator.foreachBetween { case (t, f) =>
+            sb.append(f().map(TableAnnotationImpex.exportAnnotation(_, t)).getOrElse("NA"))
+          }(() => sb += '\t')
           sb.result()
         }
     }.writeTable(output, header.map(_.mkString("\t")))

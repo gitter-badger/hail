@@ -36,25 +36,25 @@ object ExportSamples extends Command {
     val output = options.output
 
     val aggregationEC = EvalContext(Map(
-      "v" ->(0, TVariant),
-      "va" ->(1, vds.vaSignature),
-      "s" ->(2, TSample),
-      "sa" ->(3, vds.saSignature),
-      "g" ->(4, TGenotype),
-      "global" ->(5, vds.globalSignature)))
+      "v" -> (0, TVariant),
+      "va" -> (1, vds.vaSignature),
+      "s" -> (2, TSample),
+      "sa" -> (3, vds.saSignature),
+      "g" -> (4, TGenotype),
+      "global" -> (5, vds.globalSignature)))
 
     val symTab = Map(
-      "s" ->(0, TSample),
-      "sa" ->(1, vds.saSignature),
-      "global" ->(2, vds.globalSignature),
-      "gs" ->(-1, TAggregable(aggregationEC)))
+      "s" -> (0, TSample),
+      "sa" -> (1, vds.saSignature),
+      "global" -> (2, vds.globalSignature),
+      "gs" -> (-1, TAggregable(aggregationEC)))
 
     val ec = EvalContext(symTab)
     ec.set(2, vds.globalAnnotation)
     aggregationEC.set(5, vds.globalAnnotation)
 
     val (header, fs) = if (cond.endsWith(".columns")) {
-      val (h, functions) = ExportTSV.parseColumnsFile(ec, cond, hConf)
+      val (h, functions) = Parser.parseColumnsFile(ec, cond, hConf)
       (Some(h), functions)
     }
     else
@@ -75,7 +75,9 @@ object ExportSamples extends Command {
       sampleAggregationOption.foreach(f => f.apply(s))
 
       var first = true
-      fs.iterator.foreachBetween(f => sb.tsvAppend(f()))(() => sb += '\t')
+      fs.iterator.foreachBetween { case (t, f) =>
+        sb.append(f().map(TableAnnotationImpex.exportAnnotation(_, t)).getOrElse("NA"))
+      }(() => sb += '\t')
       sb.result()
     }
 

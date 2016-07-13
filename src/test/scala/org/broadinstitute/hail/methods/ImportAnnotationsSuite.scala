@@ -112,8 +112,8 @@ class ImportAnnotationsSuite extends SparkSuite {
     s = ImportVCF.run(s, Array("src/test/resources/sample.vcf"))
 
     val sampleList1 = Array("foo1", "foo2", "foo3", "foo4")
-    val sampleList2 = Array("C1046::HG02024","C1046::HG02025","C1046::HG02026",
-      "C1047::HG00731","C1047::HG00732","C1047::HG00733","C1048::HG02024")
+    val sampleList2 = Array("C1046::HG02024", "C1046::HG02025", "C1046::HG02026",
+      "C1047::HG00731", "C1047::HG00732", "C1047::HG00733", "C1048::HG02024")
     val sampleList3 = s.vds.sampleIds.toArray
 
     val fileRoot = tmpDir.createTempFile(prefix = "sampleListAnnotator")
@@ -129,9 +129,9 @@ class ImportAnnotationsSuite extends SparkSuite {
     val (_, querier2) = s.vds.querySA("sa.test2")
     val (_, querier3) = s.vds.querySA("sa.test3")
 
-    assert(s.vds.sampleIdsAndAnnotations.forall{case (sample, sa) => querier1(sa).get == false})
-    assert(s.vds.sampleIdsAndAnnotations.forall{case (sample, sa) => querier3(sa).get == true})
-    assert(s.vds.sampleIdsAndAnnotations.forall{case (sample, sa) => querier2(sa).get == sampleList2.contains(sample)})
+    assert(s.vds.sampleIdsAndAnnotations.forall { case (sample, sa) => querier1(sa).get == false })
+    assert(s.vds.sampleIdsAndAnnotations.forall { case (sample, sa) => querier3(sa).get == true })
+    assert(s.vds.sampleIdsAndAnnotations.forall { case (sample, sa) => querier2(sa).get == sampleList2.contains(sample) })
   }
 
   @Test def testVariantTSVAnnotator() {
@@ -279,7 +279,8 @@ class ImportAnnotationsSuite extends SparkSuite {
 
     val jsonSchema = "Struct { Rand1: Double, Rand2: Double, Gene: String, contig: String, start: Int, ref: String, alt: String }"
     // FIXME better way to array-ify
-    val vFields = """root.contig, root.start, root.ref, root.alt.split("/")"""
+    val vFields =
+    """root.contig, root.start, root.ref, root.alt.split("/")"""
 
     s = ImportAnnotations.run(s0,
       Array("json", "src/test/resources/importAnnot.json", "--vfields", vFields, "-t", jsonSchema))
@@ -370,12 +371,12 @@ class ImportAnnotationsSuite extends SparkSuite {
     val tmpf5 = tmpDir.createTempFile("f5", ".txt")
     val tmpf6 = tmpDir.createTempFile("f6", ".txt")
 
-    writeTextFile(tmpf1, hadoopConf) { out => out.write(format1)}
-    writeTextFile(tmpf2, hadoopConf) { out => out.write(format2)}
-    writeTextFile(tmpf3, hadoopConf) { out => out.write(format3)}
-    writeTextFile(tmpf4, hadoopConf) { out => out.write(format4)}
-    writeTextFile(tmpf5, hadoopConf) { out => out.write(format5)}
-    writeTextFile(tmpf6, hadoopConf) { out => out.write(format6)}
+    writeTextFile(tmpf1, hadoopConf) { out => out.write(format1) }
+    writeTextFile(tmpf2, hadoopConf) { out => out.write(format2) }
+    writeTextFile(tmpf3, hadoopConf) { out => out.write(format3) }
+    writeTextFile(tmpf4, hadoopConf) { out => out.write(format4) }
+    writeTextFile(tmpf5, hadoopConf) { out => out.write(format5) }
+    writeTextFile(tmpf6, hadoopConf) { out => out.write(format6) }
 
     val s = SplitMulti.run(State(sc, sqlContext, LoadVCF(sc, "src/test/resources/sample.vcf")))
     val fmt1 = AnnotateVariants.run(s, Array("table", tmpf1, "-d", "\\s+", "-k", "Chr, Pos, Ref, Alt", "-r", "va.anno"))

@@ -36,17 +36,17 @@ object ExportVariants extends Command {
     val output = options.output
 
     val aggregationEC = EvalContext(Map(
-      "v" ->(0, TVariant),
-      "va" ->(1, vds.vaSignature),
-      "s" ->(2, TSample),
-      "sa" ->(3, vds.saSignature),
-      "g" ->(4, TGenotype),
-      "global" ->(5, vds.globalSignature)))
+      "v" -> (0, TVariant),
+      "va" -> (1, vds.vaSignature),
+      "s" -> (2, TSample),
+      "sa" -> (3, vds.saSignature),
+      "g" -> (4, TGenotype),
+      "global" -> (5, vds.globalSignature)))
     val symTab = Map(
-      "v" ->(0, TVariant),
-      "va" ->(1, vds.vaSignature),
-      "global" ->(2, vds.globalSignature),
-      "gs" ->(-1, TAggregable(aggregationEC)))
+      "v" -> (0, TVariant),
+      "va" -> (1, vds.vaSignature),
+      "global" -> (2, vds.globalSignature),
+      "gs" -> (-1, TAggregable(aggregationEC)))
 
 
     val ec = EvalContext(symTab)
@@ -54,7 +54,7 @@ object ExportVariants extends Command {
     aggregationEC.set(5, vds.globalAnnotation)
 
     val (header, fs) = if (cond.endsWith(".columns")) {
-      val (h, functions) = ExportTSV.parseColumnsFile(ec, cond, hConf)
+      val (h, functions) = Parser.parseColumnsFile(ec, cond, hConf)
       (Some(h), functions)
     }
     else
@@ -69,12 +69,15 @@ object ExportVariants extends Command {
         val sb = new StringBuilder()
         it.map { case (v, va, gs) =>
 
-          variantAggregations.foreach { f => f(v, va, gs)}
+          variantAggregations.foreach { f => f(v, va, gs) }
           sb.clear()
 
           ec.setAll(v, va)
 
-          fs.iterator.foreachBetween { f => sb.tsvAppend(f()) }(() => sb.append("\t"))
+          fs.iterator.foreachBetween {
+            case (t, f) =>
+              sb.append(f().map(TableAnnotationImpex.exportAnnotation(_, t)).getOrElse("NA"))
+          }(() => sb.append("\t"))
           sb.result()
         }
       }.writeTable(output, header.map(_.mkString("\t")))

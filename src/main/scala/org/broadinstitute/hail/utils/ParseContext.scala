@@ -42,15 +42,15 @@ object ParseContext {
               |  Offending file: `$filename'
            """.stripMargin)
 
-      val head = lines.next()
+      val firstLine = lines.next()
 
       val columns = if (noHeader) {
-        head.split(sep)
+        firstLine.split(sep)
           .zipWithIndex
           .map { case (_, i) => s"_$i" }
       }
       else
-        head.split(sep).map(escapeString)
+        firstLine.split(sep).map(escapeString)
 
       val duplicates = columns.duplicates()
       if (duplicates.nonEmpty) {
@@ -72,10 +72,22 @@ object ParseContext {
       check(keyCols, "invalid key columns")
       check(types.keys, "invalid type mapping")
 
+      types.foreach { case (k, v) =>
+        if (!TableAnnotationImpex.supportsType(v))
+          fatal(
+            s"""invalid type `$v' for column `$k'
+                |  Supported types: ${
+              TableAnnotationImpex.supportedTypes.map(_.toString)
+                .toArray
+                .sorted
+                .mkString(", ")
+            }""".stripMargin)
+      }
+
       val filter: (String) => Boolean = (line: String) => {
         if (noHeader)
           true
-        else line != head
+        else line != firstLine
       } && commentChar.forall(ch => !line.startsWith(ch))
 
       val colIndexMap = columns.zipWithIndex.toMap
@@ -100,7 +112,7 @@ object ParseContext {
           if (str == missing)
             null
           else
-            t.asInstanceOf[Parsable].parse(str)
+            TableAnnotationImpex.importAnnotation(str, t)
         }
         catch {
           case e: Exception =>

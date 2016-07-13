@@ -1,7 +1,9 @@
 package org.broadinstitute.hail.expr
 
+import org.apache.hadoop
 import org.broadinstitute.hail.Utils._
 
+import scala.io.Source
 import scala.util.parsing.combinator.JavaTokenParsers
 import scala.util.parsing.input.Position
 
@@ -72,7 +74,7 @@ object Parser extends JavaTokenParsers {
   def withPos[T](p: => Parser[T]): Parser[Positioned[T]] =
     positioned[Positioned[T]](p ^^ { x => Positioned(x) })
 
-  def parseExportArgs(code: String, ec: EvalContext): (Option[Array[String]], Array[() => Option[Any]]) = {
+  def parseExportArgs(code: String, ec: EvalContext): (Option[Array[String]], Array[(Type, () => Option[Any])]) = {
     val (header, ts) = parseAll(export_args, code) match {
       case Success(result, _) => result.asInstanceOf[(Option[Array[String]], Array[AST])]
       case NoSuccess(msg, next) => ParserUtils.error(next.pos, msg)
@@ -81,7 +83,41 @@ object Parser extends JavaTokenParsers {
     ts.foreach(_.typecheck(ec))
     val fs = ts.map { t =>
       val f = t.eval(ec)
-      () => Option(f())
+      (t.`type` match {
+        case t: Type => t
+        case bt => fatal(s"""tried to export invalid type `$bt'""")
+      }, () => Option(f()))
+    }
+
+    (header, fs)
+  }
+
+  def parseColumnsFile(
+    ec: EvalContext,
+    path: String,
+    hConf: hadoop.conf.Configuration): (Array[String], Array[(Type, () => Option[Any])]) = {
+    val pairs = readFile(path, hConf) { reader =>
+      Source.fromInputStream(reader)
+        .getLines()
+        .filter(!_.isEmpty)
+        .map { line =>
+          val cols = line.split("\t")
+          if (cols.length != 2)
+            fatal("invalid .columns file.  Include 2 columns, separated by a tab")
+          (cols(0), cols(1))
+        }.toArray
+    }
+
+    val header = pairs.map(_._1)
+    val fs = pairs.map { case (_, e) =>
+      val (bt, f) = parse(e, ec)
+      bt match {
+        case t: Type => (t, f)
+        case _ => fatal(
+          s"""invalid export expression resulting in unprintable type `$bt'
+              |  Offending expression: `$e'
+             """.stripMargin)
+      }
     }
 
     (header, fs)
