@@ -1,17 +1,13 @@
 package org.broadinstitute.hail.variant
 
 import org.broadinstitute.hail.SparkSuite
-import org.broadinstitute.hail.Utils._
 import org.broadinstitute.hail.check.{Gen, Prop}
-import org.broadinstitute.hail.driver.{AggregateIntervals, SplitMulti, State}
 import org.broadinstitute.hail.io.annotators.IntervalListAnnotator
-import org.broadinstitute.hail.methods.LoadVCF
 import org.broadinstitute.hail.utils._
 import org.testng.annotations.Test
 
-import scala.io.Source
+class IntervalListSuite extends SparkSuite {
 
-class IntervalSuite extends SparkSuite {
   def genomicInterval(contig: String, start: Int, end: Int): Interval[Locus] =
     Interval(Locus(contig, start),
       Locus(contig, end))
@@ -105,62 +101,5 @@ class IntervalSuite extends SparkSuite {
         inSet == inTree
     }
     p.check()
-  }
-
-  @Test def testAggregate() {
-    val vds = LoadVCF(sc, "src/test/resources/sample2.vcf", nPartitions = Some(2)).cache()
-    val state = SplitMulti.run(State(sc, sqlContext, vds))
-    val iList = tmpDir.createTempFile("input", ".interval_list")
-    val tmp1 = tmpDir.createTempFile("output", ".tsv")
-
-    val startPos = 16050036 - 250000
-    val endPos = 17421565 + 250000
-    val g = Gen.parameterized { p =>
-      val rng = p.rng
-      Gen.const((0 until 500).map { _ =>
-        val start = rng.nextInt(startPos, endPos)
-        val end = rng.nextInt(start, endPos)
-        Interval(start, end)
-      })
-    }
-    val p = Prop.forAll(g) { intervals =>
-      writeTextFile(iList, hadoopConf) { out =>
-        intervals.foreach { i =>
-          out.write(s"22\t${i.start}\t${i.end}\n")
-        }
-      }
-
-      AggregateIntervals.run(state, Array(
-        "-i", iList,
-        "-o", tmp1,
-        "-c", "nSNP = variants.count(v.altAllele.isSNP), nIndel = variants.count(v.altAllele.isIndel), N = variants.count(true)"))
-
-      val variants = state
-        .vds
-        .variants
-        .collect()
-
-      readFile(tmp1, hadoopConf) { in =>
-
-        Source.fromInputStream(in)
-          .getLines()
-          .toArray
-          .tail
-          .forall { line =>
-            val Array(_, startStr, endStr, nSnpStr, nIndelStr, nStr) = line.split("\t")
-            val start = startStr.toInt
-            val end = endStr.toInt
-            val nSnp = nSnpStr.toInt
-            val nIndel = nIndelStr.toInt
-            val n = nStr.toInt
-
-            (nSnp == variants.count(v => v.start >= start && v.start < end && v.altAllele.isSNP)) &&
-              (nIndel == variants.count(v => v.start >= start && v.start < end && v.altAllele.isIndel)) &&
-              (n == variants.count(v => v.start >= start && v.start < end))
-          }
-      }
-    }
-
-    p.check(count = 10)
   }
 }

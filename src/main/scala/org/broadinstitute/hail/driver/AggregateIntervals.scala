@@ -3,7 +3,9 @@ package org.broadinstitute.hail.driver
 import org.broadinstitute.hail.Utils._
 import org.broadinstitute.hail.annotations.Annotation
 import org.broadinstitute.hail.expr._
+import org.broadinstitute.hail.io.annotators.IntervalListAnnotator
 import org.broadinstitute.hail.methods._
+import org.broadinstitute.hail.utils.{Interval, IntervalTree}
 import org.broadinstitute.hail.variant._
 import org.kohsuke.args4j.{Option => Args4jOption}
 
@@ -71,12 +73,12 @@ object AggregateIntervals extends Command {
 
     val variantAggregations = Aggregators.buildVariantaggregations(vds, aggregationEC)
 
-    val gis = GenomicIntervalSet.read(options.input, sc.hadoopConfiguration)
-    val gisBc = sc.broadcast(gis)
+    val intervals = IntervalListAnnotator.read(options.input, sc.hadoopConfiguration)
+    val gisBc = sc.broadcast(intervals)
 
-    val results = vds.variantsAndAnnotations.treeAggregate(mutable.Map.empty[GenomicInterval, Array[Any]])({
+    val results = vds.variantsAndAnnotations.treeAggregate(mutable.Map.empty[Interval[Locus], Array[Any]])({
       case (m, (v, va)) =>
-        val intervals = gisBc.value.query(v.contig, v.start)
+        val intervals = gisBc.value.query(Locus(v.contig, v.start))
         intervals.foreach(i => m += (i -> seqOp(m.getOrElse(i, zvf()), (v, va))))
         m
     }, { case (m1, m2) =>
@@ -100,13 +102,13 @@ object AggregateIntervals extends Command {
       }
       sb += '\n'
 
-      gis.intervals
+      intervals
         .toArray
         .sorted
         .iterator
         .foreachBetween { interval =>
 
-          sb.append(interval.contig)
+          sb.append(interval.start.contig)
           sb += '\t'
           sb.append(interval.start)
           sb += '\t'
@@ -114,7 +116,7 @@ object AggregateIntervals extends Command {
           val res = results.getOrElse(interval, zvf())
           resultOp(res)
 
-          ec.set(0, Annotation(interval.contig, interval.start, interval.end))
+          ec.set(0, Annotation(interval.start.contig, interval.start, interval.end))
           fs.map(_ ()).foreach { r =>
             sb += '\t'
             sb.tsvAppend(r)
