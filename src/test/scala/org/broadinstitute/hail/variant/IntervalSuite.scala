@@ -120,13 +120,14 @@ class IntervalSuite extends SparkSuite {
       Gen.const((0 until 500).map { _ =>
         val start = rng.nextInt(startPos, endPos)
         val end = rng.nextInt(start, endPos)
-        Interval(start, end)
+        Interval(Locus("22", start), Locus("22", end))
       })
     }
     val p = Prop.forAll(g) { intervals =>
+
       writeTextFile(iList, hadoopConf) { out =>
         intervals.foreach { i =>
-          out.write(s"22\t${i.start}\t${i.end}\n")
+          out.write(s"22\t${i.start.position}\t${i.end.position}\n")
         }
       }
 

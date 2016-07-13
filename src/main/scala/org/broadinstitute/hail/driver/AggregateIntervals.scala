@@ -110,9 +110,9 @@ object AggregateIntervals extends Command {
 
           sb.append(interval.start.contig)
           sb += '\t'
-          sb.append(interval.start)
+          sb.append(interval.start.position)
           sb += '\t'
-          sb.append(interval.end)
+          sb.append(interval.end.position)
           val res = results.getOrElse(interval, zvf())
           resultOp(res)
 
