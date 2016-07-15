@@ -1,10 +1,10 @@
 package org.broadinstitute.hail.driver
 
+import org.apache.spark.sql.Row
 import org.broadinstitute.hail.Utils._
 import org.broadinstitute.hail.annotations.Annotation
 import org.broadinstitute.hail.expr._
-import org.broadinstitute.hail.io.annotators._
-import org.broadinstitute.hail.utils.{ParseContext, ParseSettings}
+import org.broadinstitute.hail.utils.{TextTableConfiguration, TextTableReader}
 import org.broadinstitute.hail.variant._
 import org.json4s.jackson.JsonMethods._
 import org.kohsuke.args4j.{Argument, Option => Args4jOption}
@@ -31,9 +31,9 @@ object ImportAnnotationsTable extends Command {
       usage = "Specify identifier to be treated as missing")
     var missingIdentifier: String = "NA"
 
-    @Args4jOption(required = false, name = "-k", aliases = Array("--keys"),
+    @Args4jOption(required = false, name = "-e", aliases = Array("--variant-expr"),
       usage = "Specify the column identifiers for chromosome, position, ref, and alt (in that order)")
-    var vCols: String = "Chromosome,Position,Ref,Alt"
+    var vExpr: String = "Chromosome,Position,Ref,Alt"
 
     @Args4jOption(required = false, name = "-s", aliases = Array("--select"),
       usage = "Select only certain columns.  Enter columns to keep as a comma-separated list")
@@ -70,45 +70,34 @@ object ImportAnnotationsTable extends Command {
 
     if (files.isEmpty)
       fatal("Arguments referred to no files")
-
-    val vCols = AnnotateVariantsTable.parseColumns(options.vCols)
-    val keySig =
-      if (vCols.length == 1)
-        vCols.head -> TVariant
-      else
-        vCols(1) -> TInt
-
-    val settings = ParseSettings(
-      types = Parser.parseAnnotationTypes(options.types) + keySig,
-      keyCols = vCols,
-      useCols = Option(options.select).map(o => Parser.parseIdentifierList(o)),
+    val settings = TextTableConfiguration(
+      types = Parser.parseAnnotationTypes(options.types),
+      selection = Option(options.select).map(o => Parser.parseIdentifierList(o)),
       noHeader = options.noHeader,
       separator = options.separator,
       missing = options.missingIdentifier,
       commentChar = Option(options.commentChar))
 
-    val pc = ParseContext.read(files.head, state.hadoopConf, settings)
+    val (struct, rdd) = TextTableReader.read(state.sc, files, settings)
 
-    val filter = pc.filter
-    val parser = pc.parser
+    val ec = EvalContext(struct.fields.map(f => (f.name, f.`type`)): _*)
+    val variantFn = Parser.parse[Variant](options.vExpr, ec, TVariant)
 
-    val rdd = state.sc.textFilesLines(files)
-      .filter(l => filter(l.value))
-      .map(l => l.transform { line =>
-        val pl = parser(line.value)
-        val v = pl.key match {
-          case Array(variant) => variant.asInstanceOf[Variant]
-          case Array(chr, pos, ref, alt) =>
-            Variant(chr.asInstanceOf[String], pos.asInstanceOf[Int], ref.asInstanceOf[String], alt.asInstanceOf[String])
+    val keyedRDD = rdd.map {
+      _.map { a =>
+        val r = a.asInstanceOf[Row]
+        for (i <- 0 until struct.size) {
+          ec.set(i, r.get(i))
         }
+        variantFn() match {
+          case Some(v) => (v, r: Annotation, Iterable.empty[Genotype])
+          case None => fatal("invalid variant: missing value")
+        }
+      }.value
+    }
 
-        (v, pl.value): (Variant, Annotation)
-      })
-
-    val vds = new VariantDataset(
-      VariantMetadata(IndexedSeq.empty, Annotation.emptyIndexedSeq(0), Annotation.empty,
-        TStruct.empty, pc.schema, TStruct.empty, wasSplit = true),
-      rdd.map { case (v, va) => (v, va, Iterable.empty) })
+    val vds: VariantDataset = VariantSampleMatrix(VariantMetadata(Array.empty[String], IndexedSeq.empty[Annotation], Annotation.empty,
+      TStruct.empty, struct, TStruct.empty), keyedRDD)
 
     state.copy(vds = vds)
   }
@@ -125,7 +114,7 @@ object ImportAnnotationsJSON extends Command {
       usage = "Type of imported JSON")
     var `type`: String = _
 
-    @Args4jOption(required = true, name = "--vfields",
+    @Args4jOption(required = true, name = "-e", aliases = Array("--variant-expr"),
       usage = "Expressions for chromosome, position, ref and alt in terms of `root'")
     var variantFields: String = _
   }

@@ -142,7 +142,7 @@ abstract class SuperCommand extends Command {
 
   override def parseArgs(args: Array[String]): Options = {
     val options = newOptions
-    if (args(0) ==  "-h")
+    if (args(0) == "-h")
       options.printUsage = true
 
     val subArgs = args.dropWhile(_ == "-h")

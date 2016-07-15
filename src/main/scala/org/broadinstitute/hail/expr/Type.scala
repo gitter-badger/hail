@@ -445,6 +445,33 @@ case class TStruct(fields: IndexedSeq[Field]) extends Type {
     }
   }
 
+  def filter(f: (Field) => Boolean): (TStruct, Filterer) = {
+    val included = fields.map(f)
+
+    val newStruct = TStruct(fields.zip(included)
+      .flatMap { case (field, incl) =>
+        if (incl)
+          Some(field.name -> field.`type`)
+        else
+          None
+      }: _*)
+
+    val filterer = (a: Annotation) =>
+      if (a == null)
+        a
+      else {
+        val r = a.asInstanceOf[Row]
+        val subset = included.zipWithIndex
+          .flatMap { case (incl, i) =>
+            if (incl)
+              Some(r.get(i))
+            else None
+          }
+      }
+
+    (newStruct, filterer)
+  }
+
   def updateKey(key: String, i: Int, sig: Type): Type = {
     assert(fieldIdx.contains(key))
 

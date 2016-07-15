@@ -1,9 +1,10 @@
 package org.broadinstitute.hail.driver
 
+import org.apache.spark.sql.Row
 import org.broadinstitute.hail.Utils._
 import org.broadinstitute.hail.annotations.Annotation
 import org.broadinstitute.hail.expr._
-import org.broadinstitute.hail.utils.{ParseContext, ParseSettings}
+import org.broadinstitute.hail.utils.{TextTableConfiguration, TextTableReader}
 import org.kohsuke.args4j.{Option => Args4jOption}
 
 object AnnotateSamplesTable extends Command {
@@ -13,9 +14,9 @@ object AnnotateSamplesTable extends Command {
       usage = "TSV file path")
     var input: String = _
 
-    @Args4jOption(name = "-k", aliases = Array("--key"),
+    @Args4jOption(name = "-e", aliases = Array("--sample-expr"),
       usage = "Identify the name of the column containing the sample IDs")
-    var keyCol: String = "Sample"
+    var sampleExpr: String = "Sample"
 
     @Args4jOption(required = false, name = "-t", aliases = Array("--types"),
       usage = "Define types of fields in annotations files")
@@ -61,31 +62,36 @@ object AnnotateSamplesTable extends Command {
 
     val input = options.input
 
-    val settings = ParseSettings(
+    val settings = TextTableConfiguration(
       types = Parser.parseAnnotationTypes(options.types),
-      keyCols = Array(options.keyCol),
-      useCols = Option(options.select).map(o => Parser.parseIdentifierList(o)),
+      selection = Option(options.select).map(o => Parser.parseIdentifierList(o)),
       noHeader = options.noHeader,
       separator = options.separator,
       missing = options.missingIdentifier,
       commentChar = Option(options.commentChar))
 
-    val pc = ParseContext.read(options.input, state.hadoopConf, settings)
+    val (struct, rdd) = TextTableReader.read(state.sc, Array(options.input), settings)
 
-    val filter = pc.filter
-    val parser = pc.parser
+    val ec = EvalContext(struct.fields.map(f => (f.name, f.`type`)): _*)
+    val sampleFn = Parser.parse[String](options.sampleExpr, ec, TString)
 
-    val m = readLines(options.input, state.hadoopConf) { lines =>
-      lines
-        .filter(l => filter(l.value))
-        .map(l => l.transform { line =>
-          val pl = parser(line.value)
-          val Array(sample) = pl.key
-          (sample.asInstanceOf[String], pl.value): (String, Annotation)
-        }).toMap
-    }
+    val map = rdd
+      .map {
+        _.map { a =>
+          val r = a.asInstanceOf[Row]
+          for (i <- 0 until struct.size) {
+            ec.set(i, r.get(i))
+          }
+          sampleFn() match {
+            case Some(s) => (s, r: Annotation)
+            case None => fatal("invalid sample: missing value")
+          }
+        }.value
+      }
+      .collect()
+      .toMap
 
-    val annotated = vds.annotateSamples(m, pc.schema,
+    val annotated = vds.annotateSamples(map, struct,
       Parser.parseAnnotationRoot(options.root, Annotation.SAMPLE_HEAD))
     state.copy(vds = annotated)
   }

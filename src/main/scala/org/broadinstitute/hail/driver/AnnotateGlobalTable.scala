@@ -3,7 +3,7 @@ package org.broadinstitute.hail.driver
 import org.broadinstitute.hail.Utils._
 import org.broadinstitute.hail.annotations.Annotation
 import org.broadinstitute.hail.expr._
-import org.broadinstitute.hail.utils.{ParseContext, ParseSettings}
+import org.broadinstitute.hail.utils.{TextTableReader, TextTableConfiguration}
 import org.kohsuke.args4j.{Option => Args4jOption}
 
 object AnnotateGlobalTable extends Command {
@@ -57,30 +57,21 @@ object AnnotateGlobalTable extends Command {
 
     val path = Parser.parseAnnotationRoot(options.root, Annotation.GLOBAL_HEAD)
 
-    val settings = ParseSettings(
+    val settings = TextTableConfiguration(
       types = Parser.parseAnnotationTypes(options.types),
-      keyCols = Array.empty[String],
-      useCols = Option(options.select).map(o => Parser.parseIdentifierList(o)),
+      selection = Option(options.select).map(o => Parser.parseIdentifierList(o)),
       noHeader = options.noHeader,
       separator = options.separator,
       missing = options.missingIdentifier,
       commentChar = Option(options.commentChar))
 
-    val pc = ParseContext.read(options.input, state.hadoopConf, settings)
+    val (struct, rdd) = TextTableReader.read(state.sc, Array(options.input), settings)
 
-    val filter = pc.filter
-    val parser = pc.parser
+    val table = rdd
+      .map(_.value)
+      .collect(): IndexedSeq[Annotation]
 
-    val table = readLines(options.input, state.hadoopConf) { lines => lines
-      .filter(l => filter(l.value))
-      .map(_.transform { line =>
-        val pl = parser(line.value)
-        pl.value: Annotation
-      })
-      .toIndexedSeq
-    }
-
-    val (newGlobalSig, inserter) = vds.insertGlobal(TArray(pc.schema), path)
+    val (newGlobalSig, inserter) = vds.insertGlobal(TArray(struct), path)
 
     state.copy(vds = vds.copy(
       globalAnnotation = inserter(vds.globalAnnotation, Some(table)),

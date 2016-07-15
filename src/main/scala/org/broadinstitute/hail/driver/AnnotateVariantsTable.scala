@@ -1,9 +1,10 @@
 package org.broadinstitute.hail.driver
 
+import org.apache.spark.sql.Row
 import org.broadinstitute.hail.Utils._
 import org.broadinstitute.hail.annotations.Annotation
 import org.broadinstitute.hail.expr._
-import org.broadinstitute.hail.utils.{ParseContext, ParseSettings}
+import org.broadinstitute.hail.utils.{TextTableConfiguration, TextTableReader}
 import org.broadinstitute.hail.variant.Variant
 import org.kohsuke.args4j.{Argument, Option => Args4jOption}
 
@@ -24,9 +25,9 @@ object AnnotateVariantsTable extends Command {
       usage = "Specify identifier to be treated as missing")
     var missingIdentifier: String = "NA"
 
-    @Args4jOption(required = false, name = "-k", aliases = Array("--keys"),
-      usage = "Specify the column identifiers for chromosome, position, ref, and alt (in that order)")
-    var vCols: String = "Chromosome,Position,Ref,Alt"
+    @Args4jOption(required = false, name = "-e", aliases = Array("--variant-expr"),
+      usage = "Specify an expression to construct a variant from the fields of the text table")
+    var vExpr: String = "Variant(Chromosome,Position,Ref,Alt)"
 
     @Args4jOption(required = false, name = "-s", aliases = Array("--select"),
       usage = "Select only certain columns.  Enter columns to keep as a comma-separated list")
@@ -58,16 +59,6 @@ object AnnotateVariantsTable extends Command {
 
   def requiresVDS = true
 
-  def parseColumns(s: String): Array[String] = {
-    val cols = Parser.parseIdentifierList(s)
-    if (cols.length != 4 && cols.length != 1)
-      fatal(
-        s"""Cannot read chr, pos, ref, alt columns from `$s':
-            |  enter four comma-separated column identifiers for separate chr/pos/ref/alt columns, or
-            |  one column identifier for a single chr:pos:ref:alt column.""".stripMargin)
-    cols
-  }
-
   def run(state: State, options: Options): State = {
 
     val files = hadoopGlobAll(options.arguments.asScala, state.hadoopConf)
@@ -76,42 +67,35 @@ object AnnotateVariantsTable extends Command {
 
     val vds = state.vds
 
-    val vCols = parseColumns(options.vCols)
-    val keySig =
-      if (vCols.length == 1)
-        vCols.head -> TVariant
-      else
-        vCols(1) -> TInt
-
-    val settings = ParseSettings(
-      types = Parser.parseAnnotationTypes(options.types) + keySig,
-      keyCols = vCols,
-      useCols = Option(options.select).map(o => Parser.parseIdentifierList(o)),
+    val settings = TextTableConfiguration(
+      types = Parser.parseAnnotationTypes(options.types),
+      selection = Option(options.select).map(o => Parser.parseIdentifierList(o)),
       noHeader = options.noHeader,
       separator = options.separator,
       missing = options.missingIdentifier,
       commentChar = Option(options.commentChar))
 
-    val pc = ParseContext.read(files.head, state.hadoopConf, settings)
+    val (struct, rdd) = TextTableReader.read(state.sc, files, settings)
 
-    val filter = pc.filter
-    val parser = pc.parser
+    val ec = EvalContext(struct.fields.map(f => (f.name, f.`type`)): _*)
+    val variantFn = Parser.parse[Variant](options.vExpr, ec, TVariant)
 
-    val annotationTable = state.sc.textFilesLines(files)
-      .filter(l => filter(l.value))
-      .map(l => l.transform { line =>
-        val pl = parser(line.value)
-        val v = pl.key match {
-          case Array(variant) => variant.asInstanceOf[Variant]
-          case Array(chr, pos, ref, alt) =>
-            Variant(chr.asInstanceOf[String], pos.asInstanceOf[Int], ref.asInstanceOf[String], alt.asInstanceOf[String])
+    val keyedRDD = rdd.map {
+      _.map { a =>
+        val r = a.asInstanceOf[Row]
+        for (i <- 0 until struct.size) {
+          ec.set(i, r.get(i))
         }
-        (v, pl.value): (Variant, Annotation)
-      })
+        variantFn() match {
+          case Some(v) => (v, r: Annotation)
+          case None => fatal("invalid variant: missing value")
+        }
+      }.value
+    }
 
     val annotated = vds
       .withGenotypeStream()
-      .annotateVariants(annotationTable, pc.schema,
+      .annotateVariants(keyedRDD, struct,
         Parser.parseAnnotationRoot(options.root, Annotation.VARIANT_HEAD))
 
     state.copy(vds = annotated)

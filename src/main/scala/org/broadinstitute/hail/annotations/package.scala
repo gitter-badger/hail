@@ -15,4 +15,6 @@ package object annotations {
   type Inserter = (Annotation, Option[Any]) => Annotation
 
   type Assigner = (Annotation, Option[Any]) => Annotation
+
+  type Filterer = (Annotation) => Annotation
 }

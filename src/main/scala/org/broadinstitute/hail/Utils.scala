@@ -316,16 +316,16 @@ class RichOrderedSeq[T: Ordering](s: Seq[T]) {
 
 class RichSparkContext(val sc: SparkContext) extends AnyVal {
   def textFilesLines(files: Array[String], f: String => Unit = s => (),
-    nPartitions: Int = sc.defaultMinPartitions): RDD[Line] = {
+    nPartitions: Int = sc.defaultMinPartitions): RDD[WithContext[String]] = {
     files.foreach(f)
     sc.union(
       files.map(file =>
         sc.textFileLines(file, nPartitions)))
   }
 
-  def textFileLines(file: String, nPartitions: Int = sc.defaultMinPartitions): RDD[Line] =
+  def textFileLines(file: String, nPartitions: Int = sc.defaultMinPartitions): RDD[WithContext[String]] =
     sc.textFile(file, nPartitions)
-      .map(l => Line(l, None, file))
+      .map(l => WithContext(l, TextContext(l, file, None)))
 }
 
 class RichRDD[T](val r: RDD[T]) extends AnyVal {
@@ -453,10 +453,10 @@ class RichPairRDD[K, V](val r: RDD[(K, V)]) extends AnyVal {
     r.mapPartitions(p => new SpanningIterator(p))
 
   def leftOuterJoinDistinct[W](other: RDD[(K, W)])
-                              (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null): RDD[(K, (V, Option[W]))] = leftOuterJoinDistinct(other, defaultPartitioner(r, other))
+    (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null): RDD[(K, (V, Option[W]))] = leftOuterJoinDistinct(other, defaultPartitioner(r, other))
 
   def leftOuterJoinDistinct[W](other: RDD[(K, W)], partitioner: Partitioner)
-                              (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)= {
+    (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     r.cogroup(other, partitioner).flatMapValues { pair =>
       val w = pair._2.headOption
       pair._1.map((_, w))
@@ -464,10 +464,10 @@ class RichPairRDD[K, V](val r: RDD[(K, V)]) extends AnyVal {
   }
 
   def joinDistinct[W](other: RDD[(K, W)])
-                     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null): RDD[(K, (V, W))] = joinDistinct(other, defaultPartitioner(r, other))
+    (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null): RDD[(K, (V, W))] = joinDistinct(other, defaultPartitioner(r, other))
 
   def joinDistinct[W](other: RDD[(K, W)], partitioner: Partitioner)
-                     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)= {
+    (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     r.cogroup(other, partitioner).flatMapValues { pair =>
       for (v <- pair._1.iterator; w <- pair._2.iterator.take(1)) yield (v, w)
     }
@@ -1070,29 +1070,39 @@ object Utils extends Logging {
     }
   }
 
-  case class Line(value: String, position: Option[Int], filename: String) {
-    def transform[T](f: Line => T): T = {
+  abstract class Context {
+    def wrapError(e: Exception): Nothing
+  }
+
+  case class TextContext(line: String, file: String, position: Option[Int]) extends Context {
+    def wrapError(e: Exception): Nothing = {
+      val msg = e match {
+        case _: FatalException => e.getMessage
+        case _ => s"caught $e"
+      }
+      val lineToPrint =
+        if (line.length > 62)
+          line.take(59) + "..."
+        else
+          line
+
+      log.error(
+        s"""
+           |$file${position.map(ln => ":" + (ln + 1)).getOrElse("")}: $msg
+           |  offending line: $line""".stripMargin)
+      fatal(
+        s"""
+           |$file${position.map(ln => ":" + (ln + 1)).getOrElse("")}: $msg
+           |  offending line: $lineToPrint""".stripMargin)
+    }
+  }
+
+  case class WithContext[T](value: T, source: Context) {
+    def map[U](f: T => U): WithContext[U] = {
       try {
-        f(this)
+        copy[U](value = f(value))
       } catch {
-        case e: Exception =>
-          val lineToPrint =
-            if (value.length > 62)
-              value.take(59) + "..."
-            else
-              value
-          val msg = if (e.isInstanceOf[FatalException])
-            e.getMessage
-          else
-            s"caught $e"
-          log.error(
-            s"""
-               |$filename${position.map(ln => ":" + (ln + 1)).getOrElse("")}: $msg
-               |  offending line: $value""".stripMargin)
-          fatal(
-            s"""
-               |$filename${position.map(ln => ":" + (ln + 1)).getOrElse("")}: $msg
-               |  offending line: $lineToPrint""".stripMargin)
+        case e: Exception => source.wrapError(e)
       }
     }
   }
@@ -1104,14 +1114,16 @@ object Utils extends Logging {
       str
   }
 
-  def readLines[T](filename: String, hConf: hadoop.conf.Configuration)(reader: (Iterator[Line] => T)): T = {
+  def readLines[T](filename: String, hConf: hadoop.conf.Configuration)(reader: (Iterator[WithContext[String]] => T)): T = {
     readFile[T](filename, hConf) {
       is =>
         val lines = Source.fromInputStream(is)
           .getLines()
           .zipWithIndex
           .map {
-            case (value, position) => Line(value, Some(position), filename)
+            case (value, position) =>
+              val source = TextContext(value, filename, Some(position))
+              WithContext(value, source)
           }
         reader(lines)
     }
