@@ -4,7 +4,7 @@ import org.broadinstitute.hail.Utils._
 import org.broadinstitute.hail.annotations.Annotation
 import org.broadinstitute.hail.check.Prop._
 import org.broadinstitute.hail.expr._
-import org.broadinstitute.hail.variant.Genotype
+import org.broadinstitute.hail.variant.{Genotype, Variant}
 import org.broadinstitute.hail.{FatalException, SparkSuite}
 import org.testng.annotations.Test
 
@@ -224,6 +224,11 @@ class ExprSuite extends SparkSuite {
     ))
     assert(eval[Boolean](""" index(structArray, f2).contains("B") """).contains(true))
     assert(eval[Boolean](""" index(structArray, f2).contains("E") """).contains(false))
+
+    assert(eval[Variant]("""variant("1", 1, "A", "T")""").contains(Variant("1", 1, "A", "T")))
+    assert(eval[Variant]("""variant("1", 1, "A", ["T", "G"])""").contains(Variant("1", 1, "A", Array("T", "G"))))
+    assert(eval[Boolean]("""let v = variant("1", 1, "A", "T") in variant(str(v)) == v""").contains(true))
+
     // FIXME catch parse errors
   }
 

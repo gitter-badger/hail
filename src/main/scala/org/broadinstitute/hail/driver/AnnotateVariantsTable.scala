@@ -25,9 +25,9 @@ object AnnotateVariantsTable extends Command {
       usage = "Specify identifier to be treated as missing")
     var missingIdentifier: String = "NA"
 
-    @Args4jOption(required = false, name = "-e", aliases = Array("--variant-expr"),
+    @Args4jOption(required = true, name = "-e", aliases = Array("--variant-expr"),
       usage = "Specify an expression to construct a variant from the fields of the text table")
-    var vExpr: String = "Variant(Chromosome,Position,Ref,Alt)"
+    var vExpr: String = _
 
     @Args4jOption(required = false, name = "-s", aliases = Array("--select"),
       usage = "Select only certain columns.  Enter columns to keep as a comma-separated list")
@@ -67,15 +67,32 @@ object AnnotateVariantsTable extends Command {
 
     val vds = state.vds
 
+
     val settings = TextTableConfiguration(
       types = Parser.parseAnnotationTypes(options.types),
-      selection = Option(options.select).map(o => Parser.parseIdentifierList(o)),
       noHeader = options.noHeader,
       separator = options.separator,
       missing = options.missingIdentifier,
       commentChar = Option(options.commentChar))
 
     val (struct, rdd) = TextTableReader.read(state.sc, files, settings)
+
+    val (filteredStruct, filterer) = Option(options.select)
+      .map(Parser.parseIdentifierList)
+      .map { cols =>
+
+        val fields = struct.fields.map(_.name).toSet
+        cols.foreach { name =>
+          if (!fields.contains(name))
+            fatal(
+              s"""invalid column selection `$name'
+                 |  Columns detected: [${cols.map('"' + _ + '"').mkString(", ")}]
+               """.stripMargin)
+        }
+        val selectionSet = cols.toSet
+        struct.filter((f: Field) => selectionSet.contains(f.name))
+      }
+      .getOrElse(struct.filter(_ => true))
 
     val ec = EvalContext(struct.fields.map(f => (f.name, f.`type`)): _*)
     val variantFn = Parser.parse[Variant](options.vExpr, ec, TVariant)
@@ -87,7 +104,7 @@ object AnnotateVariantsTable extends Command {
           ec.set(i, r.get(i))
         }
         variantFn() match {
-          case Some(v) => (v, r: Annotation)
+          case Some(v) => (v, filterer(r))
           case None => fatal("invalid variant: missing value")
         }
       }.value
@@ -95,7 +112,7 @@ object AnnotateVariantsTable extends Command {
 
     val annotated = vds
       .withGenotypeStream()
-      .annotateVariants(keyedRDD, struct,
+      .annotateVariants(keyedRDD, filteredStruct,
         Parser.parseAnnotationRoot(options.root, Annotation.VARIANT_HEAD))
 
     state.copy(vds = annotated)

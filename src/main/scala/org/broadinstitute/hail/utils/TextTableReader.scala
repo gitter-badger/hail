@@ -10,7 +10,6 @@ import scala.io.Source
 
 object TextTableConfiguration {
   final val defaultTypes = Map.empty[String, Type]
-  final val defaultSelection: Option[Seq[String]] = None
   final val defaultSep = "\t"
   final val defaultMissing = "NA"
   final val defaultComment: Option[String] = None
@@ -19,27 +18,25 @@ object TextTableConfiguration {
 
 case class TextTableConfiguration(
   types: Map[String, Type] = TextTableConfiguration.defaultTypes,
-  selection: Option[Seq[String]] = TextTableConfiguration.defaultSelection,
   commentChar: Option[String] = TextTableConfiguration.defaultComment,
   separator: String = TextTableConfiguration.defaultSep,
   missing: String = TextTableConfiguration.defaultMissing,
   noHeader: Boolean = TextTableConfiguration.defaultNoHeader)
 
 object TextTableReader {
-
-  val booleanRegex = """([Tt]rue)|([Ff]alse)|(TRUE)|(FALSE)""".r
-  val integerRegex = """\d+""".r
-  val doubleRegex = """(-?\d+(\.\d+)?)|(-?(\d*)?\.\d+)|(-?\d+(\.\d+)?[eE]-\d+""".r
+  //
+  //  val booleanRegex = """([Tt]rue)|([Ff]alse)|(TRUE)|(FALSE)""".r
+  //  val integerRegex = """\d+""".r
+  //  val doubleRegex = """(-?\d+(\.\d+)?)|(-?(\d*)?\.\d+)|(-?\d+(\.\d+)?[eE]-\d+""".r
 
   def read(sc: SparkContext,
     files: Array[String],
     config: TextTableConfiguration): (TStruct, RDD[WithContext[Annotation]]) = read(sc, files, config.types,
-    config.selection, config.commentChar, config.separator, config.missing, config.noHeader)
+    config.commentChar, config.separator, config.missing, config.noHeader)
 
   def read(sc: SparkContext,
     files: Array[String],
     types: Map[String, Type] = TextTableConfiguration.defaultTypes,
-    selection: Option[Seq[String]] = TextTableConfiguration.defaultSelection,
     commentChar: Option[String] = TextTableConfiguration.defaultComment,
     separator: String = TextTableConfiguration.defaultSep,
     missing: String = TextTableConfiguration.defaultMissing,
@@ -108,21 +105,21 @@ object TextTableReader {
           val split = line.split(separator)
           checkLength(split)
           Annotation.fromSeq(
-            for (elem <- split; (name, t) <- namesAndTypes) yield {
-              try {
-                if (elem == missing)
-                  null
-                else
-                  TableAnnotationImpex.importAnnotation(elem, t)
-              }
-              catch {
-                case e: Exception =>
-                  fatal(s"""${e.getClass.getName}: could not convert "$elem" to $t in column "$name" """)
-              }
-            })
+            (split, namesAndTypes).zipped
+              .map { case (elem, (name, t)) =>
+                try {
+                  if (elem == missing)
+                    null
+                  else
+                    TableAnnotationImpex.importAnnotation(elem, t)
+                }
+                catch {
+                  case e: Exception =>
+                    fatal(s"""${e.getClass.getName}: could not convert "$elem" to $t in column "$name" """)
+                }
+              })
         }
       }
-
 
     (schema, rdd)
   }

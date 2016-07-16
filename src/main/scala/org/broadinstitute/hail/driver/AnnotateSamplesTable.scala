@@ -14,9 +14,9 @@ object AnnotateSamplesTable extends Command {
       usage = "TSV file path")
     var input: String = _
 
-    @Args4jOption(name = "-e", aliases = Array("--sample-expr"),
-      usage = "Identify the name of the column containing the sample IDs")
-    var sampleExpr: String = "Sample"
+    @Args4jOption(required = true, name = "-e", aliases = Array("--sample-expr"),
+      usage = "Expression of columns to form sample ID")
+    var sampleExpr: String = _
 
     @Args4jOption(required = false, name = "-t", aliases = Array("--types"),
       usage = "Define types of fields in annotations files")
@@ -64,13 +64,26 @@ object AnnotateSamplesTable extends Command {
 
     val settings = TextTableConfiguration(
       types = Parser.parseAnnotationTypes(options.types),
-      selection = Option(options.select).map(o => Parser.parseIdentifierList(o)),
       noHeader = options.noHeader,
       separator = options.separator,
       missing = options.missingIdentifier,
       commentChar = Option(options.commentChar))
 
     val (struct, rdd) = TextTableReader.read(state.sc, Array(options.input), settings)
+
+    val (filteredStruct, filterer) = Option(options.select)
+      .map(Parser.parseIdentifierList)
+      .map { cols =>
+
+        val fields = struct.fields.map(_.name).toSet
+        cols.foreach { name =>
+          if (!fields.contains(name))
+            fatal(s"""invalid column selection `$name'""")
+        }
+        val selectionSet = cols.toSet
+        struct.filter((f: Field) => selectionSet.contains(f.name))
+      }
+      .getOrElse(struct.filter(_ => true))
 
     val ec = EvalContext(struct.fields.map(f => (f.name, f.`type`)): _*)
     val sampleFn = Parser.parse[String](options.sampleExpr, ec, TString)
@@ -83,7 +96,7 @@ object AnnotateSamplesTable extends Command {
             ec.set(i, r.get(i))
           }
           sampleFn() match {
-            case Some(s) => (s, r: Annotation)
+            case Some(s) => (s, filterer(r))
             case None => fatal("invalid sample: missing value")
           }
         }.value
@@ -91,7 +104,7 @@ object AnnotateSamplesTable extends Command {
       .collect()
       .toMap
 
-    val annotated = vds.annotateSamples(map, struct,
+    val annotated = vds.annotateSamples(map, filteredStruct,
       Parser.parseAnnotationRoot(options.root, Annotation.SAMPLE_HEAD))
     state.copy(vds = annotated)
   }

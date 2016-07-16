@@ -461,12 +461,13 @@ case class TStruct(fields: IndexedSeq[Field]) extends Type {
         a
       else {
         val r = a.asInstanceOf[Row]
-        val subset = included.zipWithIndex
+        Annotation.fromSeq(included.zipWithIndex
           .flatMap { case (incl, i) =>
             if (incl)
               Some(r.get(i))
             else None
-          }
+          })
+
       }
 
     (newStruct, filterer)

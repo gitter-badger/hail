@@ -194,8 +194,8 @@ case class Variant(contig: String,
   altAlleles: IndexedSeq[AltAllele]) extends Ordered[Variant] {
   /* The position is 1-based. Telomeres are indicated by using positions 0 or N+1, where N is the length of the
        corresponding chromosome or contig. See the VCF spec, v4.2, section 1.4.1. */
-  require(start >= 0, s"created a variant with negative position: `${this.toString}'")
-  require(!ref.isEmpty, s"created a variant with an empty ref string: `${this.toString}'")
+  require(start >= 0, s"invalid variant: negative position: `${this.toString}'")
+  require(!ref.isEmpty, s"invalid variant: empty contig: `${this.toString}'")
 
   def nAltAlleles: Int = altAlleles.length
 

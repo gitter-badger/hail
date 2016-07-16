@@ -59,7 +59,6 @@ object AnnotateGlobalTable extends Command {
 
     val settings = TextTableConfiguration(
       types = Parser.parseAnnotationTypes(options.types),
-      selection = Option(options.select).map(o => Parser.parseIdentifierList(o)),
       noHeader = options.noHeader,
       separator = options.separator,
       missing = options.missingIdentifier,
@@ -67,11 +66,26 @@ object AnnotateGlobalTable extends Command {
 
     val (struct, rdd) = TextTableReader.read(state.sc, Array(options.input), settings)
 
+    val (filteredStruct, filterer) = Option(options.select)
+      .map(Parser.parseIdentifierList)
+      .map { cols =>
+
+        val fields = struct.fields.map(_.name).toSet
+        cols.foreach { name =>
+          if (!fields.contains(name))
+            fatal(s"""invalid column selection `$name'""")
+        }
+        val selectionSet = cols.toSet
+        struct.filter((f: Field) => selectionSet.contains(f.name))
+      }
+      .getOrElse(struct.filter(_ => true))
+
     val table = rdd
       .map(_.value)
+      .map(filterer)
       .collect(): IndexedSeq[Annotation]
 
-    val (newGlobalSig, inserter) = vds.insertGlobal(TArray(struct), path)
+    val (newGlobalSig, inserter) = vds.insertGlobal(TArray(filteredStruct), path)
 
     state.copy(vds = vds.copy(
       globalAnnotation = inserter(vds.globalAnnotation, Some(table)),

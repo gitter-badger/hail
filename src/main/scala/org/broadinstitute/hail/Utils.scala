@@ -1071,11 +1071,11 @@ object Utils extends Logging {
   }
 
   abstract class Context {
-    def wrapError(e: Exception): Nothing
+    def wrapException(e: Exception): Nothing
   }
 
   case class TextContext(line: String, file: String, position: Option[Int]) extends Context {
-    def wrapError(e: Exception): Nothing = {
+    def wrapException(e: Exception): Nothing = {
       val msg = e match {
         case _: FatalException => e.getMessage
         case _ => s"caught $e"
@@ -1102,7 +1102,7 @@ object Utils extends Logging {
       try {
         copy[U](value = f(value))
       } catch {
-        case e: Exception => source.wrapError(e)
+        case e: Exception => source.wrapException(e)
       }
     }
   }

@@ -34,8 +34,8 @@ object AnnotateSamplesList extends Command {
       if (lines.isEmpty)
         warn(s"Empty annotation file given ${options.input}")
 
-      lines.map(_.value)
-    }.toSet
+      lines.map(_.value).toSet
+    }
 
     val sampleAnnotations = vds.sampleIds.map { s => (s, samplesInList.contains(s)) }.toMap
 

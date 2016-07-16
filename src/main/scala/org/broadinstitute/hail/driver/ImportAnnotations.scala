@@ -31,9 +31,9 @@ object ImportAnnotationsTable extends Command {
       usage = "Specify identifier to be treated as missing")
     var missingIdentifier: String = "NA"
 
-    @Args4jOption(required = false, name = "-e", aliases = Array("--variant-expr"),
-      usage = "Specify the column identifiers for chromosome, position, ref, and alt (in that order)")
-    var vExpr: String = "Chromosome,Position,Ref,Alt"
+    @Args4jOption(required = true, name = "-e", aliases = Array("--variant-expr"),
+      usage = "Specify an expression to construct a variant from the fields of the text table")
+    var vExpr: String = _
 
     @Args4jOption(required = false, name = "-s", aliases = Array("--select"),
       usage = "Select only certain columns.  Enter columns to keep as a comma-separated list")
@@ -72,13 +72,26 @@ object ImportAnnotationsTable extends Command {
       fatal("Arguments referred to no files")
     val settings = TextTableConfiguration(
       types = Parser.parseAnnotationTypes(options.types),
-      selection = Option(options.select).map(o => Parser.parseIdentifierList(o)),
       noHeader = options.noHeader,
       separator = options.separator,
       missing = options.missingIdentifier,
       commentChar = Option(options.commentChar))
 
     val (struct, rdd) = TextTableReader.read(state.sc, files, settings)
+
+    val (filteredStruct, filterer) = Option(options.select)
+      .map(Parser.parseIdentifierList)
+      .map { cols =>
+
+        val fields = struct.fields.map(_.name).toSet
+        cols.foreach { name =>
+          if (!fields.contains(name))
+            fatal(s"""invalid column selection `$name'""")
+        }
+        val selectionSet = cols.toSet
+        struct.filter((f: Field) => selectionSet.contains(f.name))
+      }
+      .getOrElse(struct.filter(_ => true))
 
     val ec = EvalContext(struct.fields.map(f => (f.name, f.`type`)): _*)
     val variantFn = Parser.parse[Variant](options.vExpr, ec, TVariant)
@@ -90,14 +103,14 @@ object ImportAnnotationsTable extends Command {
           ec.set(i, r.get(i))
         }
         variantFn() match {
-          case Some(v) => (v, r: Annotation, Iterable.empty[Genotype])
+          case Some(v) => (v, filterer(r), Iterable.empty[Genotype])
           case None => fatal("invalid variant: missing value")
         }
       }.value
     }
 
     val vds: VariantDataset = VariantSampleMatrix(VariantMetadata(Array.empty[String], IndexedSeq.empty[Annotation], Annotation.empty,
-      TStruct.empty, struct, TStruct.empty), keyedRDD)
+      TStruct.empty, filteredStruct, TStruct.empty), keyedRDD)
 
     state.copy(vds = vds)
   }
@@ -114,7 +127,7 @@ object ImportAnnotationsJSON extends Command {
       usage = "Type of imported JSON")
     var `type`: String = _
 
-    @Args4jOption(required = true, name = "-e", aliases = Array("--variant-expr"),
+    @Args4jOption(required = true, name = "-e", aliases = Array("--vfields"),
       usage = "Expressions for chromosome, position, ref and alt in terms of `root'")
     var variantFields: String = _
   }
