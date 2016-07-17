@@ -55,7 +55,7 @@ object AnnotateVariantsTable extends Command {
 
   def description = "Annotate variants with delimited text file"
 
-  def supportsMultiallelic = false
+  def supportsMultiallelic = true
 
   def requiresVDS = true
 

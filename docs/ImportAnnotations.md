@@ -45,11 +45,11 @@ Argument | Shortcut | Description
 `table`                     | `---` | Invoke this functionality (`annotatesamples table <args>`)
 `--input <file>`            | `-i`  | specify the file path **(Required)**
 `--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `sa`, e.g. `sa.phenotype` **(Required)**
-`--key <column-id>`         | `-k`  | specify the name of the column containing sample IDs **(Optional with default "Sample")**
+`--sample-expr <expr>`      | `-e`  | Provide an expression from the given fields to produce the sample ID key **(Required)**
 `--types <type-mapping>`    | `-t`  | specify data types of fields, in a comma-delimited string of `name: Type` elements.  **If a field is not found in this type map, it will be read and stored as a string** **(Optional)**
 `--delimiter <regex>` | `-d`  | specify file delimiter **(Optional with default "\\t")**
 `--missing <missing-value>` | `-m`  | specify identifiers to be treated as missing, in a comma-separated list **(Optional with default "NA")**
-`--select <cols-to-use>`     | `-s`  | Only load specific columns, delimited by commas **(Optional, all columns used by default)**
+`--select <cols-to-use>`    | `-s`  | Only load specific columns, delimited by commas **(Optional, all columns used by default)**
 `--comment <comment-char>`  | `-c`  | Skip lines following in the given string **(Optional)**
 `--no-header`               | `---` | Indicate that the file has no header.  Columns will instead be read as numbered, from `_0, _1, _2, ... _N`
 
@@ -58,7 +58,7 @@ ____
 **Example 1:**
 
 ```
-$ cat ~/samples.tsv
+$ column -t ~/samples.tsv
 Sample  Phenotype1   Phenotype2  Age
 PT-1234 24.15        ADHD        24
 PT-1235 31.01        ADHD        25
@@ -68,13 +68,14 @@ PT-1238 NA           ADHD        89
 PT-1239 27.53        Control     55
 ```
 
-To annotate from this file, one must a) specify where to put it in sample annotations, and b) specify the types of `Phenotype1` and `Age`.  The sample header agrees with the default ("Sample") and the missingness is encoded as "NA", also the default.  The Hail command line should look like:
+To annotate from this file, one must a) specify where to put it in sample annotations, b) specify the expression for the sample key, and c) specify the types of `Phenotype1` and `Age`.  The sample header agrees with the default ("Sample") and the missingness is encoded as "NA", also the default.  The Hail command line should look like:
 
 ```
 $ hail [read / import / previous commands] \
     annotatesamples table \
         -i file:///user/me/samples.tsv \
         -t "Phenotype1: Double, Age: Int" \
+        -e "Sample" \
         -r sa.phenotypes
 ```
 
@@ -84,10 +85,13 @@ $ hail [read / import / previous commands] \
 Sample annotations:
 sa: sa.<identifier>
     phenotypes: sa.phenotypes.<identifier>
+        Sample: String
         Phenotype1: Double
         Phenotype2: String
         Age: Int
 ```
+
+Using the argument `--select "Phenotype1, Phenotype2, Age"` will only load those columns and prevent `Sample` from being loaded in the annotations.
 
 ____
 
@@ -106,15 +110,16 @@ study3  PT-0003
 1kg     PT-0007
 ```
 
-This file does not have non-string types, but it does have a sample column identifier that is not "Sample", and missingness encoded by "." instead of "NA".  The command line should read:
+This file does not have non-string types, but we still need to designate how to get the sample ID.  Since `PT-ID` contains nonstandard characters, we need to escape it in the expr language with backticks.  Missingness here is encoded by "." instead of "NA", so we must indicate this with the `--missing` argument.  The command line should read:
 
 ```
 $ hail [read / import, previous commands] \
     annotatesamples table \
         -i file:///user/me/samples2.tsv \
-        -s PT-ID \
+        -e '`PT-ID`' \
         --missing "." \
-        -r sa.group1.batch
+        --select Batch \
+        -r sa.group1
 ```
 
 
@@ -217,16 +222,16 @@ This module expects text files with multiple delimited columns (default: tab-del
 
 Argument | Shortcut | Description
 :-: | :-: | ---
-`table`                     | `---` | Invoke this functionality (`annotatevariants table <args>`)
-`<files...>`            | `---`  | specify the file or files to be read **(Required)**
-`--root <root>`             | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `va`, e.g. `va.anno` **(Required)**
-`--keys <column-ids>`         | `-k`  | Either one column name (if Chr:Pos:Ref:Alt), or four comma-separated column identifiers **(Optional with default "Chromosome, Position, Ref, Alt")**
-`--types <type-mapping>`    | `-t`  | specify data types of fields, in a comma-delimited string of `name: Type` elements.  **If a field is not found in this type map, it will be read and stored as a string** **(Optional)**
-`--delimiter <regex>` | `-d`  | specify file delimiter **(Optional with default "\\t")**
-`--missing <missing-value>` | `-m`  | specify identifiers to be treated as missing, in a comma-separated list **(Optional with default "NA")**
-`--select <cols-to-use>`     | `-s`  | Only load specific columns, delimited by commas **(Optional, all columns used by default)**
-`--comment <comment-char>`  | `-c`  | Skip lines following in the given string **(Optional)**
-`--no-header`               | `---` | Indicate that the file has no header.  Columns will instead be read as numbered, from `_0, _1, _2, ... _N`
+`table`                       | `---` | Invoke this functionality (`annotatevariants table <args>`)
+`<files...>`                  | `---` | specify the file or files to be read **(Required)**
+`--root <root>`               | `-r`  | specify the annotation path in which to place the fields read from the file, as a period-delimited path starting with `va`, e.g. `va.anno` **(Required)**
+`--variant-expr <column-ids>` | `-e`  | Specify a variant constructor taking the form of `variant(contig, position, ref, alt)` or `variant(colon delimited string)`.  See below for more information
+`--types <type-mapping>`      | `-t`  | specify data types of fields, in a comma-delimited string of `name: Type` elements.  **If a field is not found in this type map, it will be read and stored as a string** **(Optional)**
+`--delimiter <regex>`         | `-d`  | specify file delimiter **(Optional with default "\\t")**
+`--missing <missing-value>`   | `-m`  | specify identifiers to be treated as missing, in a comma-separated list **(Optional with default "NA")**
+`--select <cols-to-use>`      | `-s`  | Only load specific columns, delimited by commas **(Optional, all columns loaded by default)**
+`--comment <comment-char>`    | `-c`  | Skip lines following in the given string **(Optional)**
+`--no-header`                 | `---` | Indicate that the file has no header.  Columns will instead be read as numbered, from `_0, _1, _2, ... _N`
 
 ____
 
@@ -249,8 +254,10 @@ $ hail [read / import / previous commands] \
         file:///user/me/consequences.tsv.gz \
         -t "DNAseSensitivity: Double" \
         -r va.varianteffects \
-        -v Variant
+        -e 'variant(Variant)'
 ```
+
+Note the somewhat strange-looking argument to `-e`.  This is a hail expr-language expression that produces a variant from a `String` argument, if the string follows the expected format `CHR:POS:REF:ALT`.
 
 This invocation will annotate variants with the following schema:
 
@@ -259,6 +266,7 @@ Variant annotations:
 va: va.<identifier>
     <probably lots of other stuff here>
     varianteffects: va.varianteffects.<identifier>
+        Variant: Variant
         Consequence: String
         DNAseSensitivity: Double
 ```
@@ -284,7 +292,8 @@ $ hail [read / import / previous commands] \
         file:///user/me/ExAC_Counts.tsv.gz \
         -t "AC: Int" \
         -r va.exac \
-        -v "Chr,Pos,Ref,Alt"
+        -s AC \ 
+        -v "variant(Chr,Pos.toInt,Ref,Alt)"
 ```
 
 And the schema:
