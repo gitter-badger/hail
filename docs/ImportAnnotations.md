@@ -52,6 +52,7 @@ Argument | Shortcut | Description
 `--select <cols-to-use>`    | `-s`  | Only load specific columns, delimited by commas **(Optional, all columns used by default)**
 `--comment <comment-char>`  | `-c`  | Skip lines following in the given string **(Optional)**
 `--no-header`               | `---` | Indicate that the file has no header.  Columns will instead be read as numbered, from `_0, _1, _2, ... _N`
+`--no-impute`               | `---` | Turn off type imputation (untyped columns will be loaded as type `String`
 
 ____
 
@@ -232,6 +233,7 @@ Argument | Shortcut | Description
 `--select <cols-to-use>`      | `-s`  | Only load specific columns, delimited by commas **(Optional, all columns loaded by default)**
 `--comment <comment-char>`    | `-c`  | Skip lines following in the given string **(Optional)**
 `--no-header`                 | `---` | Indicate that the file has no header.  Columns will instead be read as numbered, from `_0, _1, _2, ... _N`
+`--no-impute`               | `---` | Turn off type imputation (untyped columns will be loaded as type `String`
 
 ____
 
@@ -707,6 +709,7 @@ Argument | Shortcut | Description
 `--select <cols-to-use>`     | `-s`  | Only load specific columns, delimited by commas **(Optional, all columns used by default)**
 `--comment <comment-char>`  | `-c`  | Skip lines following in the given string **(Optional)**
 `--no-header`               | `---` | Indicate that the file has no header.  Columns will instead be read as numbered, from `_0, _1, _2, ... _N`
+`--no-impute`               | `---` | Turn off type imputation (untyped columns will be loaded as type `String`
  
 **Example**
 

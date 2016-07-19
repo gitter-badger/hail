@@ -33,10 +33,6 @@ object AnnotateVariantsTable extends Command {
       usage = "Select only certain columns.  Enter columns to keep as a comma-separated list")
     var select: String = _
 
-    @Args4jOption(required = false, name = "--no-header",
-      usage = "indicate that the file has no header and columns should be indicated by `_1, _2, ... _N' (0-indexed)")
-    var noHeader: Boolean = _
-
     @Args4jOption(required = false, name = "-d", aliases = Array("--delimiter"),
       usage = "Field delimiter regex")
     var separator: String = "\\t"
@@ -44,6 +40,14 @@ object AnnotateVariantsTable extends Command {
     @Args4jOption(required = false, name = "-c", aliases = Array("--comment"),
       usage = "Skip lines beginning with the given pattern")
     var commentChar: String = _
+
+    @Args4jOption(required = false, name = "--no-header",
+      usage = "indicate that the file has no header and columns should be indicated by `_1, _2, ... _N' (0-indexed)")
+    var noHeader: Boolean = _
+
+    @Args4jOption(required = false, name = "--no-impute",
+      usage = "turn off column type imputation")
+    var noImpute: Boolean = _
 
     @Argument(usage = "<files...>")
     var arguments: java.util.ArrayList[String] = new java.util.ArrayList[String]()
@@ -71,6 +75,7 @@ object AnnotateVariantsTable extends Command {
     val settings = TextTableConfiguration(
       types = Parser.parseAnnotationTypes(options.types),
       noHeader = options.noHeader,
+      noImpute = options.noImpute,
       separator = options.separator,
       missing = options.missingIdentifier,
       commentChar = Option(options.commentChar))
