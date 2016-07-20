@@ -1,10 +1,13 @@
  - Changes to all `table` commands that parse text files.
+    - type imputation from the first twenty lines.
     - option `-s, --samplecol` in `annotatesamples table` has been renamed to `-e, --sample-expr`.  This no longer takes a column name, but instead takes an expr language transformation of the column names to produce the sample key.  This could still be a column name e.g. `-e Sample`, but it could also be something like `-e FID.split("_")[1]`. 
-    - option `-v, --vcolumns` in `annotatevariants table` has been renamed to `-e, --variant-expr`.  This no longer takes a column name, but instead takes an expr language transformation of the column names to produce the variant key.  This expression will use the new expr variant constructor, `variant(args)`.  As before, this can take either one string column `CHR:POS:REF:ALT` (which will look like `variant(VariantColumn)`) or it can take four arguments of type `String, Int, String, (String || Array[String])`.  In the second case, this argument will look something like `variant(Chr, Pos.toInt, Ref, Alt)`. 
+    - option `-v, --vcolumns` in `annotatevariants table` has been renamed to `-e, --variant-expr`.  This no longer takes a column name, but instead takes an expr language transformation of the column names to produce the variant key.  This expression will use the new expr variant constructor, `variant(args)`.  As before, this can take an imputed `Variant` column, one string column `CHR:POS:REF:ALT` (which will look like `variant(VariantColumn)`) or it can take four arguments of type `String, Int, String, (String || Array[String])`.  In the second case, this argument will look something like `variant(Chr, Pos.toInt, Ref, Alt)`. 
     - added a few more options to all `table` commands:
     - `--select`: optional argument, takes a comma-delimited set of columns, and will only read these.  Otherwise, all columns will be added to annotations.
     - `--comment`: optional argument.  Will skip any line starting in the given string.
     - `--no-header`: indicates that the file(s) don't have a header, and columns will be read as "_0", "_1", ... "_N".  You can use the other arguments with these columns, e.g. `--sample-expr _2`.
+    - `--no-impute`: turns off type imputation
+    
 
 ____
 
