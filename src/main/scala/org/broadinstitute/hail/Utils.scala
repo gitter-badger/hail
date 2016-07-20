@@ -1105,6 +1105,14 @@ object Utils extends Logging {
         case e: Exception => source.wrapException(e)
       }
     }
+
+    def foreach(f: T => Unit) {
+      try {
+        f(value)
+      } catch {
+        case e: Exception => source.wrapException(e)
+      }
+    }
   }
 
   def truncate(str: String, length: Int = 60): String = {

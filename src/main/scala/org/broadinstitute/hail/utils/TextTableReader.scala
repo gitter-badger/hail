@@ -78,16 +78,16 @@ object TextTableReader {
 
     val firstFile = files.head
     val firstLines = readLines(firstFile, sc.hadoopConfiguration) { lines =>
-      lines
+      val filt = lines
         .filter(line => commentChar.forall(pattern => !line.value.startsWith(pattern)))
 
-      if (lines.isEmpty)
+      if (filt.isEmpty)
         fatal(
           s"""invalid file: no lines remaining after comment filter
               |  Offending file: `$firstFile'
            """.stripMargin)
       else
-        lines.take(headToTake).toArray
+        filt.take(headToTake).toArray
     }
 
     val firstLine = firstLines.head.value
@@ -137,8 +137,10 @@ object TextTableReader {
         sb.append(s"Reading table with type imputation from the leading $headToTake lines\n")
         val split = firstLines.tail.map(_.map(_.split(separator)))
         split.foreach { line =>
-          if (line.value.length != nField)
-            fatal(s"field number mismatch: header contained $nField fields, found ${line.value.length}")
+          line.foreach { fields =>
+            if (line.value.length != nField)
+              fatal(s"""$firstFile: field number mismatch: header contained $nField fields, found ${line.value.length}""")
+          }
         }
 
         val columnValues = Array.tabulate(nField)(i => split.map(_.value(i)))
