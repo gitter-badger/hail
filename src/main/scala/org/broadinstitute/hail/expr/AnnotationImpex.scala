@@ -3,11 +3,10 @@ package org.broadinstitute.hail.expr
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 import org.broadinstitute.hail.Utils._
-import org.broadinstitute.hail.annotations.{Annotation, _}
+import org.broadinstitute.hail.annotations.Annotation
 import org.broadinstitute.hail.variant.{AltAllele, Genotype, Sample, Variant}
 import org.json4s._
-import org.json4s.jackson.Serialization
-import org.json4s.jackson.JsonMethods
+import org.json4s.jackson.{JsonMethods, Serialization}
 
 abstract class AnnotationImpex[T, A] {
   // FIXME for now, schema must be specified on import
@@ -16,8 +15,6 @@ abstract class AnnotationImpex[T, A] {
   def exportAnnotation(a: Annotation, t: Type): A
 
   def importAnnotation(a: A, t: Type): Annotation
-
-  def supportsType(t: Type): Boolean
 }
 
 object SparkAnnotationImpex extends AnnotationImpex[DataType, Any] {
@@ -31,7 +28,7 @@ object SparkAnnotationImpex extends AnnotationImpex[DataType, Any] {
         c
     }.mkString
   }
-  
+
   def requiresConversion(t: Type): Boolean = t match {
     case TArray(elementType) => requiresConversion(elementType)
     case TSet(_) | TDict(_) | TGenotype | TAltAllele | TVariant => true
@@ -155,8 +152,6 @@ object SparkAnnotationImpex extends AnnotationImpex[DataType, Any] {
         case _ => a
       }
   }
-
-  def supportsType(t: Type): Boolean = true
 }
 
 case class JSONExtractGenotype(
@@ -279,6 +274,10 @@ object JSONAnnotationImpex extends AnnotationImpex[Type, JValue] {
       case (JInt(x), TDouble) => x.toDouble
       case (JInt(x), TString) => x.toString
       case (JDouble(x), TDouble) => x
+      case (JString("Infinity"), TDouble) => Double.PositiveInfinity
+      case (JString("-Infinity"), TDouble) => Double.NegativeInfinity
+      case (JString("Infinity"), TFloat) => Float.PositiveInfinity
+      case (JString("-Infinity"), TFloat) => Float.NegativeInfinity
       case (JDouble(x), TFloat) => x.toFloat
       case (JString(x), TString) => x
       case (JString(x), TChar) => x
@@ -333,8 +332,6 @@ object JSONAnnotationImpex extends AnnotationImpex[Type, JValue] {
         null
     }
   }
-
-  def supportsType(t: Type): Boolean = true
 }
 
 object TableAnnotationImpex extends AnnotationImpex[Unit, String] {
@@ -360,12 +357,6 @@ object TableAnnotationImpex extends AnnotationImpex[Unit, String] {
   }
 
   def importAnnotation(a: String, t: Type): Annotation = {
-    if (!supportsType(t))
-      fatal(
-        s"""type `$t' does not support text parsing.
-           |  Supported types: ${supportedTypes.map(_.toString).toArray.sorted.mkString(", ")}
-         """.stripMargin)
-
     (t: @unchecked) match {
       case TString => a
       case TInt => a.toInt
@@ -376,17 +367,26 @@ object TableAnnotationImpex extends AnnotationImpex[Unit, String] {
       case TVariant => a.split(":") match {
         case Array(chr, pos, ref, alt) => Variant(chr, pos.toInt, ref, alt.split(","))
       }
+      case TAltAllele => a.split("/") match {
+        case Array(ref, alt) => AltAllele(ref, alt)
+      }
+      case TGenotype => a.split(":").map(x => if (x == "." || x == "./.") None else Some(x)) match {
+        case Array(gtStr, adStr, dpStr, gqStr, plStr) =>
+          val gt = gtStr.map { gt =>
+            val Array(gti, gtj) = gt.split("/").map(_.toInt)
+            Genotype.gtIndex(gti, gtj)
+          }
+          val ad = adStr.map(_.split(",").map(_.toInt))
+          val dp = dpStr.map(_.toInt)
+          val gq = gqStr.map(_.toInt)
+          val pl = plStr.map(_.split(",").map(_.toInt))
+          Genotype(gt, ad, dp, gq, pl, false)
+      }
+      case TChar => a
+      case t: TArray => JSONAnnotationImpex.importAnnotation(JsonMethods.parse(a), t)
+      case t: TSet => JSONAnnotationImpex.importAnnotation(JsonMethods.parse(a), t)
+      case t: TDict => JSONAnnotationImpex.importAnnotation(JsonMethods.parse(a), t)
+      case t: TStruct => JSONAnnotationImpex.importAnnotation(JsonMethods.parse(a), t)
     }
   }
-
-  val supportedTypes: Set[Type] = Set(
-    TString,
-    TInt,
-    TLong,
-    TFloat,
-    TDouble,
-    TBoolean,
-    TVariant)
-
-  def supportsType(t: Type): Boolean = supportedTypes(t)
 }

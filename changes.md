@@ -7,7 +7,7 @@
     - `--comment`: optional argument.  Will skip any line starting in the given string.
     - `--no-header`: indicates that the file(s) don't have a header, and columns will be read as "_0", "_1", ... "_N".  You can use the other arguments with these columns, e.g. `--sample-expr _2`.
     - `--no-impute`: turns off type imputation
-    
+  - `importannotations json` and `annotatevariants json` are gone, because you can replicate the functionality with `table` commands
 
 ____
 

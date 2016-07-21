@@ -257,7 +257,7 @@ class ImportAnnotationsSuite extends SparkSuite {
     assert(int2r.vds.same(bed2r.vds))
   }
 
-  @Test def testSerializedAnnotator() {
+  @Test def testImportAnnotations() {
     val s0 = State(sc, sqlContext)
     var s: State = null
     var t: State = null
@@ -311,17 +311,27 @@ class ImportAnnotationsSuite extends SparkSuite {
     // json
     val importJSONFile = tmpDir.createTempFile("variantAnnotationsJSON", ".vds")
 
-    val jsonSchema = "Struct { Rand1: Double, Rand2: Double, Gene: String, contig: String, start: Int, ref: String, alt: String }"
+    val jsonSchema = "_0: Struct { Rand1: Double, Rand2: Double, Gene: String, contig: String, start: Int, ref: String, alt: String }"
     // FIXME better way to array-ify
     val vFields =
-    """root.contig, root.start, root.ref, root.alt.split("/")"""
+    """variant(_0.contig, _0.start, _0.ref, _0.alt.split("/"))"""
 
     s = ImportAnnotations.run(s0,
-      Array("json", "src/test/resources/importAnnot.json", "--vfields", vFields, "-t", jsonSchema))
+      Array("table", "src/test/resources/importAnnot.json",
+        "--variant-expr", vFields,
+        "-t", jsonSchema,
+        "--no-header"))
+    s = AnnotateVariants.run(s, Array("expr", "-c", "va = va._0"))
+    s = s.copy(vds = s.vds.copy(wasSplit = true))
     Write.run(s, Array("-o", importJSONFile))
 
     s = AnnotateVariants.run(sSample,
-      Array("json", "src/test/resources/importAnnot.json", "-t", jsonSchema, "--vfields", vFields, "--root", "va.third"))
+      Array("table", "src/test/resources/importAnnot.json",
+        "-t", jsonSchema,
+        "--variant-expr", vFields,
+        "--root", "va.third",
+        "--no-header"))
+    s = AnnotateVariants.run(s, Array("expr", "-c", "va.third = va.third._0"))
     t = AnnotateVariants.run(sSample,
       Array("vds", "-i", importJSONFile, "-r", "va.third"))
 

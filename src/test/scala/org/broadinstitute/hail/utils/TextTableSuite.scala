@@ -1,7 +1,10 @@
 package org.broadinstitute.hail.utils
 
 import org.broadinstitute.hail.SparkSuite
+import org.broadinstitute.hail.check._
+import org.broadinstitute.hail.driver.{AnnotateVariantsExpr, AnnotateVariantsTable, ExportVariants, State}
 import org.broadinstitute.hail.expr._
+import org.broadinstitute.hail.variant.{VSMSubgen, VariantDataset, VariantSampleMatrix}
 import org.testng.annotations.Test
 
 class TextTableSuite extends SparkSuite {
@@ -67,5 +70,31 @@ class TextTableSuite extends SparkSuite {
       "Sample" -> TString,
       "Status" -> TString,
       "qPhen" -> TInt))
+  }
+
+  @Test def testAnnotationsReadWrite() {
+    val outPath = tmpDir.createTempFile("annotationOut", ".tsv")
+    val p = Prop.forAll(VariantSampleMatrix.gen(sc, VSMSubgen.realistic)
+      .filter(vds => vds.nVariants > 0 && vds.vaSignature != TDouble)) { vds: VariantDataset =>
+      val sb = new StringBuilder
+      vds.vaSignature.pretty(sb, 0, printAttrs = true)
+      val vaSchema = sb.result()
+
+      var state = State(sc, sqlContext, vds)
+      state = ExportVariants.run(state, Array("-o", outPath, "-c", "v, va"))
+
+      state = AnnotateVariantsTable.run(state, Array(outPath,
+        "-s", "_1",
+        "-e", "_0",
+        "-t", s"_0: Variant, _1: $vaSchema",
+        "-r", "va",
+        "--no-header",
+        "--no-impute"))
+      state = AnnotateVariantsExpr.run(state, Array("-c", "va = va._1"))
+
+      state.vds.same(vds)
+    }
+
+    p.check()
   }
 }

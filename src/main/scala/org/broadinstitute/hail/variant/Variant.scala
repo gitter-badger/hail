@@ -7,7 +7,6 @@ import org.broadinstitute.hail.check.{Arbitrary, Gen}
 import org.broadinstitute.hail.expr._
 import org.json4s._
 
-import scala.collection.mutable
 import scala.math.Numeric.Implicits._
 
 object Contig {
@@ -120,6 +119,8 @@ case class AltAllele(ref: String,
     ("ref", JString(ref)),
     ("alt", JString(alt))
   )
+
+  override def toString: String = s"$ref/$alt"
 }
 
 object Variant {

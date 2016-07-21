@@ -93,12 +93,12 @@ object TextTableReader {
     val firstLine = firstLines.head.value
 
     val columns = if (noHeader) {
-      firstLine.split(separator)
+      firstLine.split(separator, -1)
         .zipWithIndex
         .map { case (_, i) => s"_$i" }
     }
     else
-      firstLine.split(separator).map(unescapeString)
+      firstLine.split(separator, -1).map(unescapeString)
 
     val nField = columns.length
 
@@ -107,30 +107,20 @@ object TextTableReader {
       fatal(s"invalid header: found duplicate columns [${duplicates.map(x => '"' + x + '"').mkString(", ")}]")
     }
 
-    types.foreach { case (k, v) =>
-      if (!TableAnnotationImpex.supportsType(v))
-        fatal(
-          s"""invalid type `$v' for column `$k'
-              |  Supported types: ${
-            TableAnnotationImpex.supportedTypes.map(_.toString)
-              .toArray
-              .sorted
-              .mkString(", ")
-          }""".stripMargin)
-    }
-
-    if (firstLines.isEmpty)
-      fatal("no data lines in file")
-
     val sb = new StringBuilder
 
     val namesAndTypes = {
       if (noImpute) {
         sb.append("Reading table with no type imputation\n")
         columns.map { c =>
-          val t = types.getOrElse(c, TString)
-          sb.append(s"  Loading column `$c' as type `$t'\n")
-          (c, types.getOrElse(c, TString))
+          types.get(c) match {
+            case Some(t) =>
+              sb.append(s"  Loading column `$c' as type `$t' (user-specified)\n")
+              (c, t)
+            case None =>
+              sb.append(s"  Loading column `$c' as type `String' (type not specified)\n")
+              (c, TString)
+          }
         }
       }
       else {
@@ -152,10 +142,10 @@ object TextTableReader {
             case None =>
               guessType(col, missing) match {
                 case Some(t) =>
-                  sb.append(s"  Loading column `$name' as type $t (imputed from first $headToTake lines)\n")
+                  sb.append(s"  Loading column `$name' as type $t (imputed)\n")
                   (name, t)
                 case None =>
-                  sb.append(s"  Loading column `$name' as type String (no non-missing values in first $headToTake lines)\n")
+                  sb.append(s"  Loading column `$name' as type String (no non-missing values for imputation)\n")
                   (name, TString)
               }
           }
@@ -183,7 +173,7 @@ object TextTableReader {
       .filter(line => filter(line.value))
       .map {
         _.map { line =>
-          val split = line.split(separator)
+          val split = line.split(separator, -1)
           checkLength(split)
           Annotation.fromSeq(
             (split, namesAndTypes).zipped
